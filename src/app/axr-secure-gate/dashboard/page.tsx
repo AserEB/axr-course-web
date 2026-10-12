@@ -11,6 +11,7 @@ import { sendStudentStatusEmail } from '@/lib/resendEmail';
 export default function AdminDashboardPage() {
   const router = useRouter();
 
+  const [mounted, setMounted] = useState(false);
   const [adminRole, setAdminRole] = useState('assistant');
   const [adminName, setAdminName] = useState('Admin');
   const [loading, setLoading] = useState(true);
@@ -65,8 +66,9 @@ export default function AdminDashboardPage() {
   }, []);
 
   useEffect(() => {
+    setMounted(true);
     const role = localStorage.getItem('admin_role');
-    const name = localStorage.getItem('admin_full_name');
+    const name = localStorage.getItem('admin_full_name') || localStorage.getItem('admin_username');
     if (!role) {
       router.push('/axr-secure-gate/login');
       return;
@@ -76,6 +78,17 @@ export default function AdminDashboardPage() {
 
     fetchDashboardData();
   }, [router, fetchDashboardData]);
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+        <p className="font-mono text-xs font-bold uppercase tracking-wider text-cyan-400">
+          Loading Control Panel...
+        </p>
+      </div>
+    );
+  }
 
   // Toggle Registration Status (Active / Closed)
   const toggleRegistrationStatus = async () => {
@@ -460,7 +473,7 @@ export default function AdminDashboardPage() {
               </button>
             </div>
             <div className="relative aspect-square w-full bg-slate-950 rounded-2xl overflow-hidden border border-slate-800">
-              <Image src={selectedReceiptUrl} alt="Receipt" fill className="object-contain" />
+              <Image src={selectedReceiptUrl} alt="Receipt" fill unoptimized className="object-contain" />
             </div>
           </div>
         </div>
