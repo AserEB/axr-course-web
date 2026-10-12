@@ -154,7 +154,7 @@ function RegisterFormContent() {
 
             let publicReceiptUrl = `offline_${fileName}`;
 
-            // Inner Try-Catch for Storage Upload to catch "Failed to fetch" network exceptions safely
+            // Upload file to Supabase Storage with graceful exception handling
             try {
                 const { error: uploadError } = await supabase.storage
                     .from('receipts')
@@ -169,10 +169,10 @@ function RegisterFormContent() {
                         .getPublicUrl(filePath);
                     publicReceiptUrl = publicUrlData.publicUrl;
                 } else {
-                    console.warn('Storage Upload Error Notice:', uploadError.message);
+                    console.warn('Storage Upload Notice:', uploadError.message);
                 }
-            } catch (storageException) {
-                console.warn('Storage Network Connection Warning:', storageException);
+            } catch (storageErr) {
+                console.warn('Storage Connection Notice:', storageErr);
             }
 
             const numericUserId = generateNumericUserId();
@@ -593,10 +593,24 @@ function RegisterFormContent() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                                 </svg>
                             </div>
-                            <p className="text-xs font-bold text-slate-200 sm:text-sm">
-                                {receiptFile ? `የተመረጠ ፋይል፦ ${receiptFile.name}` : 'የክፍያ ማረጋገጫ ፎቶ (Receipt Screenshot) ይምረጡ'}
-                            </p>
-                            <p className="font-mono text-[10px] text-slate-500">PNG, JPG, JPEG, or PDF (Max 2MB)</p>
+
+                            {receiptFile ? (
+                                <div className="space-y-1">
+                                    <p className="text-xs sm:text-sm font-bold text-cyan-400">
+                                        የተመረጠ ፋይል፦ {receiptFile.name}
+                                    </p>
+                                    <p className="text-[11px] font-mono text-emerald-400 font-semibold">
+                                        መጠን፦ {(receiptFile.size / (1024 * 1024)).toFixed(2)} MB / 2.00 MB
+                                    </p>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="text-xs font-bold text-slate-200 sm:text-sm">
+                                        የክፍያ ማረጋገጫ ፎቶ (Receipt Screenshot) ይምረጡ
+                                    </p>
+                                    <p className="font-mono text-[10px] text-slate-500">PNG, JPG, JPEG, or PDF (Max 2MB)</p>
+                                </>
+                            )}
                         </label>
                     </div>
 
@@ -614,11 +628,18 @@ function RegisterFormContent() {
                             disabled={loading}
                             className="flex w-2/3 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 py-3.5 text-xs font-black text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.25)] transition hover:scale-[1.01] disabled:opacity-50"
                         >
-                            <span>{loading ? 'እየተላከ ነው...' : 'ምዝገባውን አጠናቅቅ'}</span>
-                            {!loading && (
-                                <svg className="h-4 w-4 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                </svg>
+                            {loading ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+                                    <span>እየተላከ ነው...</span>
+                                </div>
+                            ) : (
+                                <>
+                                    <span>ምዝገባውን አጠናቅቅ</span>
+                                    <svg className="h-4 w-4 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                    </svg>
+                                </>
                             )}
                         </button>
                     </div>
