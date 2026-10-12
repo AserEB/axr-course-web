@@ -20,6 +20,10 @@ function RegisterFormContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
+    // Registration Status Check
+    const [isRegistrationOpen, setIsRegistrationOpen] = useState<boolean>(true);
+    const [checkingSettings, setCheckingSettings] = useState<boolean>(true);
+
     // Form State
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -39,7 +43,29 @@ function RegisterFormContent() {
     // Completed State
     const [generatedCustomId, setGeneratedCustomId] = useState('');
 
+    // 1. Check if Registration is Open in Supabase Settings
     useEffect(() => {
+        async function checkRegistrationStatus() {
+            try {
+                const { data } = await supabase
+                    .from('settings')
+                    .select('value')
+                    .eq('key', 'registration_status')
+                    .single();
+
+                if (data && (data.value === 'closed' || data.value === 'false')) {
+                    setIsRegistrationOpen(false);
+                }
+            } catch {
+                // If query fails, default to open
+                setIsRegistrationOpen(true);
+            } finally {
+                setCheckingSettings(false);
+            }
+        }
+
+        checkRegistrationStatus();
+
         const refParam = searchParams.get('ref');
         if (refParam) {
             const cleanRef = refParam.replace('ref_', '').replace('AXR-STU-', '');
@@ -127,26 +153,22 @@ function RegisterFormContent() {
             let publicReceiptUrl = '';
 
             // Upload file to Supabase Storage 'receipts' bucket
-            try {
-                const { error: uploadError } = await supabase.storage
-                    .from('receipts')
-                    .upload(filePath, receiptFile, {
-                        cacheControl: '3600',
-                        upsert: false,
-                    });
+            const { error: uploadError } = await supabase.storage
+                .from('receipts')
+                .upload(filePath, receiptFile, {
+                    cacheControl: '3600',
+                    upsert: false,
+                });
 
-                if (uploadError) {
-                    console.warn('Storage upload error:', uploadError.message);
-                    publicReceiptUrl = fileName;
-                } else {
-                    const { data: publicUrlData } = supabase.storage
-                        .from('receipts')
-                        .getPublicUrl(filePath);
-                    publicReceiptUrl = publicUrlData.publicUrl;
-                }
-            } catch (uploadException) {
-                console.warn('Storage fetch exception:', uploadException);
+            if (uploadError) {
+                console.warn('Storage Upload Error:', uploadError);
+                // Fallback filename string if direct upload hits policy
                 publicReceiptUrl = fileName;
+            } else {
+                const { data: publicUrlData } = supabase.storage
+                    .from('receipts')
+                    .getPublicUrl(filePath);
+                publicReceiptUrl = publicUrlData.publicUrl;
             }
 
             const numericUserId = generateNumericUserId();
@@ -201,6 +223,61 @@ function RegisterFormContent() {
             setLoading(false);
         }
     };
+
+    // Checking Settings Loading View
+    if (checkingSettings) {
+        return (
+            <div className="mx-auto max-w-xl px-4 py-20 text-center animate-fade-in-up">
+                <div className="glass-card-pro rounded-3xl p-8 space-y-3">
+                    <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+                    <p className="text-xs font-mono font-bold text-cyan-400 uppercase">
+                        የምዝገባ ሁኔታ በማረጋገጥ ላይ...
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    // Registration Closed View
+    if (!isRegistrationOpen) {
+        return (
+            <div className="mx-auto max-w-lg px-4 py-16 animate-fade-in-up">
+                <div className="glass-card-pro rounded-3xl p-8 sm:p-10 text-center space-y-6 border-rose-500/30 shadow-[0_0_40px_rgba(244,63,94,0.15)]">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-rose-500/40 bg-rose-950/40 text-rose-400">
+                        <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                        </svg>
+                    </div>
+
+                    <div className="space-y-2">
+                        <h2 className="text-2xl font-black text-slate-100">
+                            ምዝገባ ለጊዜው ተዘግቷል!
+                        </h2>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                            የዚህ ዙር የኮርስ ምዝገባ ተጠናቋል። ለቀጣዩ ዙር ምዝገባ በይፋዊ የቴሌግራም ቻናላችን ማስታወቂያ እንለጥፋለን።
+                        </p>
+                    </div>
+
+                    <div className="pt-2 flex flex-col gap-3">
+                        <a
+                            href={`https://t.me/${SITE_CONFIG.officialChannel}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 py-3.5 text-xs font-black text-slate-950 hover:bg-cyan-400 transition"
+                        >
+                            <span>ቴሌግራም ቻናል ይቀላቀሉ</span>
+                        </a>
+                        <Link
+                            href="/"
+                            className="rounded-xl border border-slate-800 bg-slate-950 py-3 text-xs font-bold text-slate-300 hover:bg-slate-900 transition"
+                        >
+                            ወደ ዋና ገጽ ተመለስ
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="mx-auto max-w-2xl px-4 py-10 sm:py-16 animate-fade-in-up">
