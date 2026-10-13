@@ -7,10 +7,17 @@ import VideoModal from '@/components/VideoModal';
 import { calculateUserDiscount } from '@/lib/discountEngine';
 import { SITE_CONFIG } from '@/lib/constants';
 import { formatCurrency } from '@/lib/utils';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function HomePage() {
     const [isVideoOpen, setIsVideoOpen] = useState(false);
     const [inviteCount, setInviteCount] = useState(2);
+
+    // Dynamic Settings State from Supabase (3ኛ & 10ኛ)
+    const [currentRound, setCurrentRound] = useState<number>(SITE_CONFIG.currentRound || 2);
+    const [isRegActive, setIsRegActive] = useState<boolean>(true);
+    const [announcementText, setAnnouncementText] = useState<string>('');
+    const [announcementPinned, setAnnouncementPinned] = useState<boolean>(false);
 
     // Typewriter Animation Logic
     const fullText = "Master AI & Prompt Engineering";
@@ -18,6 +25,33 @@ export default function HomePage() {
     const [isTypingComplete, setIsTypingComplete] = useState(false);
 
     useEffect(() => {
+        // Fetch dynamic settings from Supabase
+        async function fetchSettings() {
+            try {
+                const { data } = await supabase.from('settings').select('*');
+                if (data) {
+                    data.forEach((item) => {
+                        if (item.key === 'current_round' && item.value) {
+                            setCurrentRound(Number(item.value));
+                        }
+                        if (item.key === 'is_registration_active' && item.value) {
+                            setIsRegActive(item.value === 'true');
+                        }
+                        if (item.key === 'announcement_text' && item.value) {
+                            setAnnouncementText(item.value);
+                        }
+                        if (item.key === 'announcement_pinned' && item.value) {
+                            setAnnouncementPinned(item.value === 'true');
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to fetch settings on homepage:', err);
+            }
+        }
+
+        fetchSettings();
+
         let index = 0;
         const timer = setInterval(() => {
             if (index <= fullText.length) {
@@ -61,11 +95,22 @@ export default function HomePage() {
             <section className="relative pt-6 lg:pt-14 animate-fade-in-up">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center space-y-6">
 
+                    {/* Admin Dynamic Pinned Announcement Banner (3ኛ) */}
+                    {announcementPinned && announcementText && (
+                        <div className="mx-auto max-w-3xl rounded-2xl border border-indigo-500/40 bg-indigo-950/60 p-4 text-xs font-semibold text-indigo-200 backdrop-blur-xl shadow-[0_0_30px_rgba(99,102,241,0.2)] animate-pulse">
+                            <div className="flex items-center justify-center gap-2">
+                                <span className="flex h-2 w-2 rounded-full bg-indigo-400" />
+                                <span className="font-bold uppercase text-indigo-300">ማስታወቂያ (Announcement)፦</span>
+                                <span>{announcementText}</span>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Status Badge */}
                     <div className="inline-flex items-center gap-2.5 rounded-full border border-cyan-500/30 bg-slate-900/90 px-4 py-1.5 backdrop-blur-xl shadow-[0_0_20px_rgba(56,189,248,0.15)]">
-                        <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+                        <span className={`flex h-2 w-2 rounded-full ${isRegActive ? 'bg-cyan-400 animate-ping' : 'bg-rose-500'}`} />
                         <span className="text-[11px] font-bold tracking-widest text-cyan-300 uppercase font-mono sm:text-xs">
-                            Round {SITE_CONFIG.currentRound} Registration Is Live
+                            Round {currentRound} {isRegActive ? 'Registration Is Live' : 'Registration Is Closed'}
                         </span>
                     </div>
 

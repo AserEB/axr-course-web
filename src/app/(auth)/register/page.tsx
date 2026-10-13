@@ -43,7 +43,7 @@ function RegisterFormContent() {
     // Completed State
     const [generatedCustomId, setGeneratedCustomId] = useState('');
 
-    // 1. Check if Registration is Open in Supabase Settings
+    // 1. Check if Registration is Open & Read Referred By Link
     useEffect(() => {
         async function checkRegistrationStatus() {
             try {
@@ -59,7 +59,6 @@ function RegisterFormContent() {
                     setIsRegistrationOpen(true);
                 }
             } catch {
-                // Default to open if settings query fails
                 setIsRegistrationOpen(true);
             } finally {
                 setCheckingSettings(false);
@@ -154,7 +153,7 @@ function RegisterFormContent() {
 
             let publicReceiptUrl = `offline_${fileName}`;
 
-            // Upload file to Supabase Storage with graceful exception handling
+            // Upload file to Supabase Storage
             try {
                 const { error: uploadError } = await supabase.storage
                     .from('receipts')
@@ -178,6 +177,7 @@ function RegisterFormContent() {
             const numericUserId = generateNumericUserId();
             const customId = generateStudentCustomId();
 
+            // Fetch Current Active Round Dynamically (10ኛ)
             let currentRound = 2;
             try {
                 const { data: settingsData } = await supabase
@@ -248,7 +248,7 @@ function RegisterFormContent() {
     if (!isRegistrationOpen) {
         return (
             <div className="mx-auto max-w-lg px-4 py-16 animate-fade-in-up">
-                <div className="glass-card-pro space-y-6 rounded-3xl border-rose-500/30 p-8 text-center shadow-[0_0_40px_rgba(244,63,94,0.15)] sm:p-10">
+                <div className="glass-card-pro space-y-6 rounded-3xl border border-rose-500/30 p-8 text-center shadow-[0_0_40px_rgba(244,63,94,0.15)] sm:p-10">
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-rose-500/40 bg-rose-950/40 text-rose-400">
                         <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
@@ -323,7 +323,7 @@ function RegisterFormContent() {
 
             {/* STEP 1 */}
             {step === 1 && (
-                <form onSubmit={handleNextStep1} className="glass-card-pro space-y-6 rounded-3xl border-cyan-500/30 p-6 sm:p-8">
+                <form onSubmit={handleNextStep1} className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 p-6 sm:p-8">
                     <div className="flex items-center gap-2.5 border-b border-slate-800 pb-4">
                         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 font-mono text-xs font-black text-cyan-400">
                             1
@@ -389,7 +389,7 @@ function RegisterFormContent() {
 
             {/* STEP 2 */}
             {step === 2 && (
-                <form onSubmit={handleNextStep2} className="glass-card-pro space-y-6 rounded-3xl border-cyan-500/30 p-6 sm:p-8">
+                <form onSubmit={handleNextStep2} className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 p-6 sm:p-8">
                     <div className="flex items-center gap-2.5 border-b border-slate-800 pb-4">
                         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 font-mono text-xs font-black text-cyan-400">
                             2
@@ -464,7 +464,7 @@ function RegisterFormContent() {
 
             {/* STEP 3 */}
             {step === 3 && (
-                <div className="glass-card-pro space-y-6 rounded-3xl border-cyan-500/30 p-6 sm:p-8">
+                <div className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 p-6 sm:p-8">
                     <div className="flex items-center gap-2.5 border-b border-slate-800 pb-4">
                         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 font-mono text-xs font-black text-cyan-400">
                             3
@@ -568,7 +568,7 @@ function RegisterFormContent() {
 
             {/* STEP 4 */}
             {step === 4 && (
-                <form onSubmit={handleSubmitRegistration} className="glass-card-pro space-y-6 rounded-3xl border-cyan-500/30 p-6 sm:p-8">
+                <form onSubmit={handleSubmitRegistration} className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 p-6 sm:p-8">
                     <div className="flex items-center gap-2.5 border-b border-slate-800 pb-4">
                         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 font-mono text-xs font-black text-cyan-400">
                             4
@@ -648,7 +648,7 @@ function RegisterFormContent() {
 
             {/* STEP 5 */}
             {step === 5 && (
-                <div className="glass-card-pro space-y-6 rounded-3xl border-emerald-500/40 p-8 text-center shadow-[0_0_40px_rgba(16,185,129,0.15)] animate-fade-in-up sm:p-12">
+                <div className="glass-card-pro space-y-6 rounded-3xl border border-emerald-500/40 p-8 text-center shadow-[0_0_40px_rgba(16,185,129,0.15)] animate-fade-in-up sm:p-12">
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/40 bg-emerald-950/40 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)]">
                         <svg className="h-8 w-8 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
