@@ -1,16 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function AdminLoginPage() {
-  const router = useRouter();
-
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Auto-redirect if already logged in
+  useEffect(() => {
+    const role = localStorage.getItem('admin_role');
+    if (role) {
+      window.location.href = '/axr-secure-gate/dashboard';
+    }
+  }, []);
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,16 +30,16 @@ export default function AdminLoginPage() {
     try {
       const cleanUser = username.trim();
 
-      // Check initial owner credentials fallback
+      // 1. Direct Owner Access Check
       if (cleanUser === 'AxRCourse' && password === 'AxR_Course_2026') {
         localStorage.setItem('admin_role', 'owner');
         localStorage.setItem('admin_username', 'AxRCourse');
         localStorage.setItem('admin_full_name', 'AxR Super Owner');
-        router.push('/axr-secure-gate/dashboard');
+        window.location.href = '/axr-secure-gate/dashboard';
         return;
       }
 
-      // Check admin_users table in Supabase
+      // 2. Check admin_users table in Supabase
       const { data, error } = await supabase
         .from('admin_users')
         .select('*')
@@ -50,11 +55,11 @@ export default function AdminLoginPage() {
         throw new Error('የተሳሳተ Password ነው።');
       }
 
-      localStorage.setItem('admin_role', data.role);
+      localStorage.setItem('admin_role', data.role || 'assistant');
       localStorage.setItem('admin_username', data.username);
-      localStorage.setItem('admin_full_name', data.full_name);
+      localStorage.setItem('admin_full_name', data.full_name || data.username);
 
-      router.push('/axr-secure-gate/dashboard');
+      window.location.href = '/axr-secure-gate/dashboard';
     } catch (err: unknown) {
       const error = err as Error;
       setErrorMessage(error.message || 'አድሚን መግባት አልተቻለም።');
@@ -65,7 +70,7 @@ export default function AdminLoginPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-12 sm:py-20 animate-fade-in-up">
-      <div className="glass-card-pro rounded-3xl p-6 sm:p-8 relative overflow-hidden border-cyan-500/30 shadow-[0_0_50px_rgba(56,189,248,0.15)] space-y-6">
+      <div className="glass-card-pro rounded-3xl p-6 sm:p-8 relative overflow-hidden border border-cyan-500/30 shadow-[0_0_50px_rgba(56,189,248,0.15)] bg-slate-900/90 space-y-6">
 
         {/* Header Icon & Title */}
         <div className="text-center space-y-3">

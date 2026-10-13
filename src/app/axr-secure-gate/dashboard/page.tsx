@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
@@ -9,11 +8,9 @@ import { Student } from '@/types';
 import { sendStudentStatusEmail } from '@/lib/resendEmail';
 
 export default function AdminDashboardPage() {
-  const router = useRouter();
-
   const [mounted, setMounted] = useState(false);
-  const [adminRole, setAdminRole] = useState('assistant');
-  const [adminName, setAdminName] = useState('Admin');
+  const [adminRole, setAdminRole] = useState<string | null>(null);
+  const [adminName, setAdminName] = useState<string>('Admin');
   const [loading, setLoading] = useState(true);
 
   // System Controls
@@ -72,23 +69,56 @@ export default function AdminDashboardPage() {
     setMounted(true);
     const role = localStorage.getItem('admin_role');
     const name = localStorage.getItem('admin_full_name') || localStorage.getItem('admin_username');
+
     if (!role) {
-      router.push('/axr-secure-gate/login');
+      window.location.href = '/axr-secure-gate/login';
       return;
     }
+
     setAdminRole(role);
     setAdminName(name || 'Admin');
-
     fetchDashboardData();
-  }, [router, fetchDashboardData]);
+  }, [fetchDashboardData]);
 
+  const handleLogout = () => {
+    localStorage.removeItem('admin_role');
+    localStorage.removeItem('admin_username');
+    localStorage.removeItem('admin_full_name');
+    window.location.href = '/axr-secure-gate/login';
+  };
+
+  // Prevent hydration layout issues
   if (!mounted) {
     return (
-      <div className="flex min-h-[70vh] flex-col items-center justify-center space-y-4 bg-slate-950 text-slate-100">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" />
-        <p className="font-mono text-xs font-bold uppercase tracking-wider text-cyan-400">
-          Loading Control Panel...
-        </p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
+        <div className="space-y-3 text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+          <p className="font-mono text-xs font-bold uppercase text-cyan-400">Loading Control Panel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Session Expired / Not Logged In View (Prevents Black Screen)
+  if (!adminRole) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-100">
+        <div className="glass-card-pro max-w-md w-full space-y-5 rounded-3xl border border-rose-500/30 bg-slate-900 p-8 text-center shadow-[0_0_50px_rgba(244,63,94,0.15)]">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-500/40 bg-rose-950/40 text-rose-400">
+            <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold">የአድሚን ክፍለ-ጊዜ አብቅቷል (Session Expired)</h2>
+          <p className="text-xs text-slate-400">እባክዎ ወደ አድሚን መግቢያ ገጽ ተመልሰው በድጋሚ ይግቡ።</p>
+          <button
+            type="button"
+            onClick={() => (window.location.href = '/axr-secure-gate/login')}
+            className="w-full rounded-xl bg-cyan-500 py-3 text-xs font-black text-slate-950 hover:bg-cyan-400 transition"
+          >
+            ወደ Login ገጽ ሂድ
+          </button>
+        </div>
       </div>
     );
   }
@@ -216,7 +246,7 @@ export default function AdminDashboardPage() {
   const pendingCount = (students || []).filter((s) => s?.status === 'Pending').length;
 
   return (
-    <div className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:py-12 space-y-8 text-slate-100 animate-fade-in-up">
+    <div className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:py-12 space-y-8 bg-slate-950 text-slate-100 animate-fade-in-up">
 
       {/* Top Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800 pb-6">
@@ -235,7 +265,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Quick Nav Actions */}
-        <div className="flex flex-wrap gap-2.5 text-xs font-bold">
+        <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold">
           {adminRole === 'owner' && (
             <Link
               href="/axr-secure-gate/owner-panel"
@@ -265,12 +295,22 @@ export default function AdminDashboardPage() {
             </svg>
             <span>Export CSV</span>
           </Link>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 rounded-xl border border-rose-500/40 bg-rose-950/40 px-4 py-2.5 text-rose-300 transition hover:bg-rose-900/60"
+          >
+            <svg className="h-4 w-4 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+            </svg>
+            <span>Logout</span>
+          </button>
         </div>
       </div>
 
       {/* SYSTEM CONTROLS & STATS */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="glass-card-pro rounded-2xl p-5 space-y-2 border-cyan-500/20 bg-slate-900/80">
+        <div className="glass-card-pro rounded-2xl p-5 space-y-2 border border-slate-800 bg-slate-900/90">
           <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
             Active Batch / Round
           </span>
@@ -293,7 +333,7 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="glass-card-pro rounded-2xl p-5 space-y-2 border-cyan-500/20 bg-slate-900/80">
+        <div className="glass-card-pro rounded-2xl p-5 space-y-2 border border-slate-800 bg-slate-900/90">
           <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
             Portal Status
           </span>
@@ -306,21 +346,21 @@ export default function AdminDashboardPage() {
             </div>
             <button
               onClick={toggleRegistrationStatus}
-              className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1 text-xs font-bold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-400"
+              className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-1 text-xs font-bold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-400"
             >
               Toggle
             </button>
           </div>
         </div>
 
-        <div className="glass-card-pro rounded-2xl p-5 space-y-1 border-amber-500/20 bg-slate-900/80">
+        <div className="glass-card-pro rounded-2xl p-5 space-y-1 border border-slate-800 bg-slate-900/90">
           <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
             Pending Review
           </span>
           <p className="font-mono text-2xl font-black text-amber-400">{pendingCount}</p>
         </div>
 
-        <div className="glass-card-pro rounded-2xl p-5 space-y-1 border-emerald-500/20 bg-slate-900/80">
+        <div className="glass-card-pro rounded-2xl p-5 space-y-1 border border-slate-800 bg-slate-900/90">
           <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
             Total Verified
           </span>
@@ -329,7 +369,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* FILTER & SEARCH BAR */}
-      <div className="glass-card-pro flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl p-4 border-cyan-500/20 bg-slate-900/80">
+      <div className="glass-card-pro flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl p-4 border border-slate-800 bg-slate-900/90">
         <div className="flex flex-wrap gap-2 text-xs font-bold">
           {(['ALL', 'Pending', 'Verified', 'Discard'] as const).map((st) => (
             <button
@@ -360,7 +400,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* STUDENTS TABLE */}
-      <div className="glass-card-pro overflow-hidden rounded-3xl border-cyan-500/20 bg-slate-900/80">
+      <div className="glass-card-pro overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/90">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="border-b border-slate-800 bg-slate-950/90 text-slate-400 uppercase font-mono text-[10px] tracking-wider">
@@ -388,7 +428,7 @@ export default function AdminDashboardPage() {
                 </tr>
               ) : (
                 filteredStudents.map((st) => (
-                  <tr key={st.user_id} className="transition hover:bg-slate-900/90">
+                  <tr key={st.user_id} className="transition hover:bg-slate-950/60">
                     <td className="p-4">
                       <p className="font-bold text-slate-100">{st.full_name}</p>
                       <p className="font-mono text-[11px] text-cyan-400 font-semibold">{st.student_custom_id || `ID: ${st.user_id}`}</p>
@@ -462,7 +502,7 @@ export default function AdminDashboardPage() {
       {/* RECEIPT VIEW MODAL */}
       {selectedReceiptUrl && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-2xl transition-all">
-          <div className="glass-card-pro relative max-w-xl w-full max-h-[85vh] rounded-3xl p-5 border-cyan-500/40 bg-slate-900 space-y-4">
+          <div className="glass-card-pro relative max-w-xl w-full max-h-[85vh] rounded-3xl p-5 border border-cyan-500/40 bg-slate-900 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-mono text-slate-200 uppercase tracking-wider">
                 Receipt Image Preview
@@ -470,7 +510,7 @@ export default function AdminDashboardPage() {
               <button
                 type="button"
                 onClick={() => setSelectedReceiptUrl(null)}
-                className="rounded-xl border border-slate-800 bg-slate-900 p-1.5 text-slate-400 hover:text-slate-100 transition"
+                className="rounded-xl border border-slate-800 bg-slate-950 p-1.5 text-slate-400 hover:text-slate-100 transition"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -487,7 +527,7 @@ export default function AdminDashboardPage() {
       {/* VERIFY MODAL */}
       {verifyingStudent && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-2xl transition-all">
-          <div className="glass-card-pro max-w-md w-full rounded-3xl p-6 space-y-5 border-emerald-500/40 bg-slate-900">
+          <div className="glass-card-pro max-w-md w-full rounded-3xl p-6 space-y-5 border border-emerald-500/40 bg-slate-900">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
               <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
               <h3 className="text-sm font-bold font-mono text-emerald-400 uppercase tracking-wider">
@@ -527,7 +567,7 @@ export default function AdminDashboardPage() {
       {/* DISCARD MODAL */}
       {discardingStudent && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-2xl transition-all">
-          <div className="glass-card-pro max-w-md w-full rounded-3xl p-6 space-y-5 border-rose-500/40 bg-slate-900">
+          <div className="glass-card-pro max-w-md w-full rounded-3xl p-6 space-y-5 border border-rose-500/40 bg-slate-900">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
               <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
               <h3 className="text-sm font-bold font-mono text-rose-400 uppercase tracking-wider">
