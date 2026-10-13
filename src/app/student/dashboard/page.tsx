@@ -51,21 +51,27 @@ export default function StudentDashboardPage() {
         setEditPhone(studentProfile.phone || '');
         setEditPassword(studentProfile.password_hash || '');
 
-        // 2. Comprehensive Multi-Format Referral Tracking using .ilike
-        const userIdStr = String(studentProfile.user_id).trim();
-        const customIdStr = (studentProfile.student_custom_id || '').trim();
-        const strippedId = customIdStr.replace('AXR-STU-', '').trim();
-        const phoneStr = (studentProfile.phone || '').trim();
+        // 2. Fail-Safe Multi-Match Referral Tracking
+        const rawCustomId = (studentProfile.student_custom_id || '').trim();
+        const cleanCustomId = rawCustomId.replace('AXR-STU-', '').trim();
+        const rawUserId = String(studentProfile.user_id).trim();
+        const rawPhone = (studentProfile.phone || '').trim();
 
-        const conditions = [`referred_by.ilike.${userIdStr}`];
-        if (customIdStr) conditions.push(`referred_by.ilike.${customIdStr}`);
-        if (strippedId && strippedId !== customIdStr) conditions.push(`referred_by.ilike.${strippedId}`);
-        if (phoneStr) conditions.push(`referred_by.ilike.${phoneStr}`);
+        // Extract last 9 digits of phone to match any format (e.g., 0991076523 or +251991076523 -> 991076523)
+        const phoneDigits = rawPhone.replace(/\D/g, '');
+        const phoneLast9 = phoneDigits.length >= 9 ? phoneDigits.slice(-9) : phoneDigits;
+
+        // Build search conditions for Custom ID, Stripped ID, User ID, and Phone variations
+        const searchTerms = Array.from(
+          new Set([rawCustomId, cleanCustomId, rawUserId, rawPhone, phoneLast9])
+        ).filter(Boolean);
+
+        const orConditions = searchTerms.map((term) => `referred_by.ilike.%${term}%`).join(',');
 
         const { data: referrals, error: refError } = await supabase
           .from('students')
           .select('*')
-          .or(conditions.join(','));
+          .or(orConditions);
 
         if (!refError && referrals) {
           setInvitedStudents(referrals as Student[]);
@@ -147,8 +153,9 @@ export default function StudentDashboardPage() {
 
   if (!student) return null;
 
-  // Referral discount calculations
+  // Referral discount and status calculations
   const verifiedInvites = invitedStudents.filter((s) => s.status === 'Verified').length;
+  const pendingInvites = invitedStudents.filter((s) => s.status === 'Pending').length;
   const discountInfo = calculateUserDiscount(verifiedInvites, invitedStudents.length, SITE_CONFIG.courseFee);
 
   const referralShareUrl = `${SITE_CONFIG.siteUrl}/register?ref=${student.student_custom_id || student.phone || student.user_id}`;
@@ -324,15 +331,15 @@ export default function StudentDashboardPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-center">
             <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3.5 space-y-1">
               <span className="text-[10px] font-mono font-bold text-slate-500 uppercase">Joined</span>
-              <p className="font-mono text-xl sm:text-2xl font-black text-slate-200">{discountInfo.total_joined}</p>
+              <p className="font-mono text-xl sm:text-2xl font-black text-slate-200">{invitedStudents.length}</p>
             </div>
             <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3.5 space-y-1">
               <span className="text-[10px] font-mono font-bold text-slate-500 uppercase">Pending</span>
-              <p className="font-mono text-xl sm:text-2xl font-black text-amber-400">{discountInfo.pending_count}</p>
+              <p className="font-mono text-xl sm:text-2xl font-black text-amber-400">{pendingInvites}</p>
             </div>
             <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-3.5 space-y-1">
               <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">My Coins</span>
-              <p className="font-mono text-xl sm:text-2xl font-black text-amber-400">{discountInfo.coins}</p>
+              <p className="font-mono text-xl sm:text-2xl font-black text-amber-400">{verifiedInvites}</p>
             </div>
             <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-3.5 space-y-1">
               <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">Discount</span>
