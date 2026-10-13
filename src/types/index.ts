@@ -15,7 +15,10 @@ export interface Student {
   admin_message?: string;
   handled_by?: string;
   round: number;
-  referred_by?: number;
+  referred_by?: number | string | null;
+  referral_coins?: number;
+  reset_token?: string;
+  reset_token_expires?: string;
   created_at?: string;
 }
 
@@ -67,4 +70,12 @@ export interface DiscountInfo {
   percent: number;
   discount_amount: number;
   final_payable: number;
+}
+
+export interface ReferralLog {
+  id?: string;
+  referrer_identifier: string;
+  referred_student_id?: number;
+  status: 'Joined' | 'Verified';
+  created_at?: string;
 }

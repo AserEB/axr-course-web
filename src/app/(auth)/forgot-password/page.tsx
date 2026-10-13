@@ -5,12 +5,22 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function ForgotPasswordPage() {
+    const [step, setStep] = useState<1 | 2>(1);
     const [identifier, setIdentifier] = useState('');
+    const [studentData, setStudentData] = useState<{ id: number; email: string; full_name: string; student_custom_id: string } | null>(null);
+
+    // OTP & Reset Password State (7ኛ)
+    const [generatedOtp, setGeneratedOtp] = useState<string>('');
+    const [inputOtp, setInputOtp] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+
     const [loading, setLoading] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
 
-    const handleResetRequest = async (e: React.FormEvent) => {
+    // Step 1: Verify Student Record and Generate Reset OTP Code
+    const handleVerifyStudent = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!identifier.trim()) {
             setErrorMsg('እባክዎ Student ID ወይም የተመዘገበ ኢሜይል አድራሻ ያስገቡ።');
@@ -24,30 +34,29 @@ export default function ForgotPasswordPage() {
         try {
             const cleanInput = identifier.trim().toLowerCase();
 
-            // Search student record by Custom ID or Email
+            // Search student record by Custom ID or Email in students table
             const { data, error } = await supabase
                 .from('students')
-                .select('email, full_name, student_custom_id')
+                .select('user_id, email, full_name, student_custom_id')
                 .or(`student_custom_id.ilike.${cleanInput},email.ilike.${cleanInput}`)
                 .maybeSingle();
 
             if (error || !data) {
-                throw new Error('በዚህ መረጃ የተመዘገበ ተማሪ አልተገኘም። እባክዎ መረጃዎን በትክክል ያረጋግጡ።');
+                throw new Error('በዚህ መረጃ የተመዘገበ ተማሪ አልተገኘም። እባክዎ ID ወይም ኢሜይልዎን በትክክል ያረጋግጡ።');
             }
 
-            if (data.email) {
-                const { error: resetError } = await supabase.auth.resetPasswordForEmail(data.email, {
-                    redirectTo: `${window.location.origin}/login`,
-                });
+            // Generate 6-Digit Verification Code
+            const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
+            setGeneratedOtp(randomCode);
+            setStudentData({
+                id: data.user_id,
+                email: data.email,
+                full_name: data.full_name,
+                student_custom_id: data.student_custom_id,
+            });
 
-                if (resetError) {
-                    setSuccessMsg(
-                        `የይለፍ ቃል ማስተካከያ ጥያቄዎ ለተማሪ መታወቂያ ${data.student_custom_id || data.full_name} ተመዝግቧል። እባክዎ በቴሌግራም ወይም በስልክ ደጋፊ ቡድናችንን ያግኙ።`
-                    );
-                } else {
-                    setSuccessMsg(`የይለፍ ቃል ማስተካከያ ሊንክ ወደ ${data.email} ተልኳል። እባክዎ ኢሜይልዎን ያረጋግጡ።`);
-                }
-            }
+            setSuccessMsg(`የማረጋገጫ ቁጥር (OTP Code) ለ ተማሪ ${data.full_name} ተዘጋጅቷል።`);
+            setStep(2);
         } catch (err: unknown) {
             const error = err as Error;
             setErrorMsg(error.message || 'ጥያቄውን ማስተላለፍ አልተቻለም። እባክዎ ደግመው ይሞክሩ።');
@@ -56,9 +65,53 @@ export default function ForgotPasswordPage() {
         }
     };
 
+    // Step 2: Confirm OTP & Update Password in DB
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setErrorMsg('');
+        setSuccessMsg('');
+
+        if (inputOtp.trim() !== generatedOtp) {
+            setErrorMsg('የስህተት ማረጋገጫ ቁጥር (Incorrect OTP Code)! እባክዎ በትክክል ያስገቡ።');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            setErrorMsg('አዲሱ Password እና ማረጋገጫው አይመሳሰሉም!');
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            setErrorMsg('Password ቢያንስ 6 አሃዝ/ፊደል መሆን አለበት።');
+            return;
+        }
+
+        if (!studentData) return;
+
+        setLoading(true);
+        try {
+            const { error } = await supabase
+                .from('students')
+                .update({ password_hash: newPassword.trim() })
+                .eq('user_id', studentData.id);
+
+            if (error) throw new Error(error.message);
+
+            setSuccessMsg('የይለፍ ቃልዎ (Password) በተሳካ ሁኔታ ተቀይሯል! አሁን መግባት ይችላሉ።');
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 2000);
+        } catch (err: unknown) {
+            const error = err as Error;
+            setErrorMsg(error.message || 'Password መቀየር አልተቻለም።');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
-        <div className="mx-auto max-w-md px-4 py-12 sm:py-20 animate-fade-in-up">
-            <div className="glass-card-pro rounded-3xl p-6 sm:p-8 relative overflow-hidden border-cyan-500/30">
+        <div className="mx-auto max-w-md px-4 py-12 sm:py-20 animate-fade-in-up bg-slate-950 min-h-screen text-slate-100">
+            <div className="glass-card-pro rounded-3xl p-6 sm:p-8 relative overflow-hidden border border-cyan-500/30 bg-slate-900 shadow-[0_0_40px_rgba(56,189,248,0.1)]">
 
                 {/* Header Icon & Title */}
                 <div className="text-center space-y-3">
@@ -91,35 +144,108 @@ export default function ForgotPasswordPage() {
                     </div>
                 )}
 
-                {/* Form */}
-                <form onSubmit={handleResetRequest} className="mt-6 space-y-5">
-                    <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                            Student ID / Email Address
-                        </label>
-                        <input
-                            type="text"
-                            required
-                            placeholder="e.g. AXR-STU-8821 or Email"
-                            value={identifier}
-                            onChange={(e) => setIdentifier(e.target.value)}
-                            className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 transition focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                        />
-                    </div>
+                {/* STEP 1: VERIFY STUDENT */}
+                {step === 1 && (
+                    <form onSubmit={handleVerifyStudent} className="mt-6 space-y-5">
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                                Student ID / Email Address
+                            </label>
+                            <input
+                                type="text"
+                                required
+                                placeholder="e.g. AXR-STU-8821 or email"
+                                value={identifier}
+                                onChange={(e) => setIdentifier(e.target.value)}
+                                className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 transition focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                            />
+                        </div>
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-600 py-3.5 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(56,189,248,0.25)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(56,189,248,0.4)] disabled:opacity-50"
-                    >
-                        <span>{loading ? 'እየተላከ ነው...' : 'Reset Password'}</span>
-                        {!loading && (
-                            <svg className="h-4 w-4 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                            </svg>
-                        )}
-                    </button>
-                </form>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-600 py-3.5 text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(56,189,248,0.25)] transition-all duration-300 hover:scale-[1.02] disabled:opacity-50"
+                        >
+                            <span>{loading ? 'ማረጋገጫ በመፈለግ ላይ...' : 'Verify Student Record'}</span>
+                            {!loading && (
+                                <svg className="h-4 w-4 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                                </svg>
+                            )}
+                        </button>
+                    </form>
+                )}
+
+                {/* STEP 2: ENTER OTP CODE & NEW PASSWORD */}
+                {step === 2 && studentData && (
+                    <form onSubmit={handleResetPassword} className="mt-6 space-y-4">
+                        <div className="rounded-2xl border border-indigo-500/30 bg-indigo-950/40 p-3.5 text-center space-y-1">
+                            <p className="text-[10px] font-mono font-bold uppercase text-indigo-300">የእርስዎ ማረጋገጫ ቁጥር (OTP Code)፦</p>
+                            <p className="text-2xl font-black font-mono tracking-widest text-cyan-300">{generatedOtp}</p>
+                            <p className="text-[10px] text-slate-400">ይህንን 6-አሃዝ ቁጥር ከታች ባለው ሳጥን ያስገቡ።</p>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                                6-Digit OTP Code
+                            </label>
+                            <input
+                                type="text"
+                                required
+                                maxLength={6}
+                                placeholder="******"
+                                value={inputOtp}
+                                onChange={(e) => setInputOtp(e.target.value)}
+                                className="mt-1.5 w-full font-mono text-center tracking-widest text-base rounded-xl border border-slate-800 bg-slate-950 px-4 py-2.5 text-slate-100 focus:border-cyan-400 focus:outline-none"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                                አዲስ Password
+                            </label>
+                            <input
+                                type="password"
+                                required
+                                placeholder="ቢያንስ 6 አሃዝ/ፊደል"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                className="mt-1.5 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-2.5 text-xs text-slate-100 focus:border-cyan-400 focus:outline-none"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                                አዲሱን Password ያረጋግጡ
+                            </label>
+                            <input
+                                type="password"
+                                required
+                                placeholder="በድጋሚ ያስገቡ"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className="mt-1.5 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-2.5 text-xs text-slate-100 focus:border-cyan-400 focus:outline-none"
+                            />
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setStep(1)}
+                                className="w-1/3 rounded-xl border border-slate-800 bg-slate-950 py-3 text-xs font-bold text-slate-300 hover:bg-slate-900 transition"
+                            >
+                                ተመለስ
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-2/3 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-500 py-3 text-xs font-black text-slate-950 hover:scale-[1.01] transition disabled:opacity-50"
+                            >
+                                {loading ? 'በማዘመን ላይ...' : 'Change Password'}
+                            </button>
+                        </div>
+                    </form>
+                )}
 
                 <div className="mt-6 flex items-center justify-between border-t border-slate-800/80 pt-4 text-xs">
                     <Link href="/login" className="font-bold text-cyan-400 hover:underline">

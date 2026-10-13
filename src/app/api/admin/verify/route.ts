@@ -46,21 +46,44 @@ export async function POST(req: NextRequest) {
     const targetName = studentName || studentData?.full_name || 'Student';
     const targetCustomId = customId || studentData?.student_custom_id || `STU-${studentId}`;
 
-    // 2. Send email notification directly via Resend SDK on server
+    // 2. Send branded email notification directly via Resend SDK on server (8ኛ)
     if (targetEmail) {
       await resend.emails.send({
         from: 'AxR Academy <onboarding@resend.dev>',
         to: [targetEmail],
         subject: '🎉 እንኳን ደስ አለዎት! የ AxR Academy ኮርስ ምዝገባዎ ተረጋገጠ',
         html: `
-          <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; background-color: #090d16; border-radius: 10px;">
-            <h2 style="color: #38bdf8;">እንኳን ደስ አለዎት ${targetName}!</h2>
-            <p style="color: #e2e8f0;">የክፍያ ማረጋገጫዎ ተቀባይነት አግኝቷል። የኮርሱ አባልነትዎ በስኬት ተረጋግጧል።</p>
-            <p style="color: #cbd5e1;">የተማሪ መታወቂያዎ፦ <b style="color: #38bdf8;">${targetCustomId}</b></p>
-            <div style="margin: 25px 0;">
-              <a href="${link || '#'}" style="background-color: #10b981; color: #000; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 8px;">ወደ ቴሌግራም ግሩፕ ግባ (Join Group)</a>
+          <div style="font-family: Arial, sans-serif; max-w: 600px; margin: 0 auto; padding: 24px; color: #f8fafc; background-color: #090d16; border-radius: 16px; border: 1px solid #1e293b;">
+            
+            <!-- BRANDED LOGO HEADER -->
+            <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #1e293b; margin-bottom: 20px;">
+              <img src="https://aserproduction.tech/assets/images/axr-logo.png" alt="AxR Academy Logo" style="height: 55px; width: auto; display: inline-block;" />
+              <p style="font-size: 11px; color: #38bdf8; font-weight: bold; font-family: monospace; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 8px;">AxR Cyber Obsidian Academy</p>
             </div>
-            <p style="font-size: 12px; color: #64748b;">AxR Academy - Cyber Obsidian Portal</p>
+
+            <!-- CONTENT BODY -->
+            <h2 style="color: #38bdf8; font-size: 20px; font-weight: 800; margin-bottom: 12px;">እንኳን ደስ አለዎት ${targetName}!</h2>
+            <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6; margin-bottom: 16px;">
+              የላኩት የክፍያ ማረጋገጫ በአድሚኖች ተገምግሞ ተቀባይነት አግኝቷል። የኮርሱ አባልነትዎ በስኬት ተረጋግጧል።
+            </p>
+
+            <div style="background-color: #0f172a; padding: 16px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 24px;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0 0 6px 0; text-transform: uppercase; font-family: monospace;">የተማሪ መታወቂያ (Student ID)</p>
+              <p style="color: #38bdf8; font-size: 22px; font-weight: 900; font-family: monospace; margin: 0;">${targetCustomId}</p>
+            </div>
+
+            <!-- CTA BUTTON -->
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${link || '#'}" style="background-color: #10b981; color: #022c22; padding: 14px 28px; text-decoration: none; font-weight: 900; font-size: 14px; border-radius: 10px; display: inline-block; box-shadow: 0 0 20px rgba(16,185,129,0.3);">
+                ወደ ቴሌግራም ግሩፕ ግባ (Join Telegram Group) →
+              </a>
+            </div>
+
+            <!-- FOOTER -->
+            <div style="border-top: 1px solid #1e293b; pt: 16px; margin-top: 24px; text-align: center;">
+              <p style="font-size: 11px; color: #64748b; margin: 0;">AxR Academy Support Team | Cyber Obsidian Portal</p>
+            </div>
+
           </div>
         `,
       });

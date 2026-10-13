@@ -15,6 +15,15 @@ export default function StudentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  // Profile Edit & Password Reveal State (4ኛ)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [editFullName, setEditFullName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   useEffect(() => {
     const fetchStudentData = async () => {
       const storedUserId = localStorage.getItem('student_user_id');
@@ -36,7 +45,11 @@ export default function StudentDashboardPage() {
           return;
         }
 
-        setStudent(studentData as Student);
+        const studentProfile = studentData as Student;
+        setStudent(studentProfile);
+        setEditFullName(studentProfile.full_name || '');
+        setEditPhone(studentProfile.phone || '');
+        setEditPassword(studentProfile.password_hash || '');
 
         // 2. Fetch list of friends invited by this student
         const { data: referrals } = await supabase
@@ -57,10 +70,60 @@ export default function StudentDashboardPage() {
     fetchStudentData();
   }, [router]);
 
+  // Handle Profile and Password Update
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!student) return;
+
+    if (!editFullName.trim() || !editPhone.trim() || !editPassword.trim()) {
+      setUpdateMessage({ type: 'error', text: 'እባክዎ ሁሉንም መስኮች ይሙሉ!' });
+      return;
+    }
+
+    if (editPassword.trim().length < 6) {
+      setUpdateMessage({ type: 'error', text: 'Password ቢያንስ 6 አሃዝ/ፊደል መሆን አለበት።' });
+      return;
+    }
+
+    setIsUpdatingProfile(true);
+    setUpdateMessage(null);
+
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({
+          full_name: editFullName.trim(),
+          phone: editPhone.trim(),
+          password_hash: editPassword.trim(),
+        })
+        .eq('user_id', student.user_id);
+
+      if (error) throw new Error(error.message);
+
+      setStudent({
+        ...student,
+        full_name: editFullName.trim(),
+        phone: editPhone.trim(),
+        password_hash: editPassword.trim(),
+      });
+
+      setUpdateMessage({ type: 'success', text: 'የእርስዎ ፕሮፋይል እና Password በተሳካ ሁኔታ ተዘምኗል!' });
+      setTimeout(() => {
+        setIsEditModalOpen(false);
+        setUpdateMessage(null);
+      }, 1500);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setUpdateMessage({ type: 'error', text: error.message || 'ማዘመን አልተሳካም።' });
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-20 text-center animate-fade-in-up">
-        <div className="glass-card-pro mx-auto max-w-md rounded-3xl p-8 space-y-4">
+        <div className="glass-card-pro mx-auto max-w-md rounded-3xl p-8 space-y-4 border border-slate-800 bg-slate-900">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
           <p className="text-xs font-mono font-bold tracking-wider text-cyan-400 uppercase">
             ዳሽቦርዱ እየተጫነ ነው...
@@ -85,7 +148,7 @@ export default function StudentDashboardPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:py-12 space-y-8 animate-fade-in-up">
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:py-12 space-y-8 animate-fade-in-up bg-slate-950 text-slate-100 min-h-screen">
 
       {/* 1. REALTIME STATUS BANNER */}
       {student.status === 'Pending' && (
@@ -128,7 +191,9 @@ export default function StudentDashboardPage() {
                   <svg className="h-4 w-4 shrink-0 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
-                  <span>{student.admin_message}</span>
+                  <a href={student.admin_message} target="_blank" rel="noopener noreferrer" className="underline hover:text-cyan-200">
+                    {student.admin_message}
+                  </a>
                 </div>
               )}
             </div>
@@ -171,7 +236,7 @@ export default function StudentDashboardPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
         {/* Printable Student Digital Pass */}
-        <div className="lg:col-span-1 glass-card-pro rounded-3xl p-6 relative overflow-hidden border-cyan-500/30 flex flex-col justify-between space-y-6">
+        <div className="lg:col-span-1 glass-card-pro rounded-3xl p-6 relative overflow-hidden border border-cyan-500/30 bg-slate-900 flex flex-col justify-between space-y-6">
           <div className="pointer-events-none absolute -top-12 -right-12 h-36 w-36 rounded-full bg-cyan-500/15 blur-2xl" />
 
           <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -203,7 +268,7 @@ export default function StudentDashboardPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Batch:</span>
-              <span className="font-semibold text-slate-200">Round {student.round}</span>
+              <span className="font-semibold text-slate-200">Round {student.round || 1}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Phone:</span>
@@ -216,20 +281,21 @@ export default function StudentDashboardPage() {
           </div>
 
           <div className="pt-2">
-            <Link
-              href="/student/profile"
-              className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-950 py-2.5 text-xs font-bold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-400"
+            <button
+              type="button"
+              onClick={() => setIsEditModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-950 py-2.5 text-xs font-bold text-slate-300 transition hover:border-cyan-500/40 hover:text-cyan-400"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
               </svg>
-              <span>Edit Profile</span>
-            </Link>
+              <span>Edit Profile & Password (4ኛ)</span>
+            </button>
           </div>
         </div>
 
         {/* 3. REFERRAL & COIN ENGINE DASHBOARD */}
-        <div className="lg:col-span-2 glass-card-pro rounded-3xl p-6 sm:p-8 space-y-6 border-cyan-500/30">
+        <div className="lg:col-span-2 glass-card-pro rounded-3xl p-6 sm:p-8 space-y-6 border border-cyan-500/30 bg-slate-900">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
@@ -318,6 +384,109 @@ export default function StudentDashboardPage() {
         </div>
 
       </div>
+
+      {/* STUDENT EDIT PROFILE & PASSWORD MODAL (4ኛ) */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-2xl transition-all">
+          <div className="glass-card-pro max-w-md w-full rounded-3xl p-6 border border-cyan-500/40 bg-slate-900 space-y-5">
+
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold font-mono text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+                <svg className="h-4 w-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                </svg>
+                <span>Edit Profile & Reveal Password</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="rounded-xl border border-slate-800 bg-slate-950 p-1.5 text-slate-400 hover:text-slate-100 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {updateMessage && (
+              <div className={`p-3 rounded-xl border text-xs font-semibold ${updateMessage.type === 'success' ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300' : 'border-rose-500/40 bg-rose-950/40 text-rose-300'}`}>
+                {updateMessage.text}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-300">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-2.5 text-xs text-slate-100 focus:border-cyan-400 focus:outline-none transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-300">Phone Number</label>
+                <input
+                  type="text"
+                  required
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-2.5 text-xs text-slate-100 focus:border-cyan-400 focus:outline-none transition"
+                />
+              </div>
+
+              {/* Password Eye Icon Reveal (4ኛ) */}
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-300">My Password</label>
+                <div className="relative mt-1.5">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-950 pl-4 pr-10 py-2.5 text-xs text-slate-100 focus:border-cyan-400 focus:outline-none transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-cyan-400 transition"
+                  >
+                    {showPassword ? (
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      </svg>
+                    ) : (
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.036 12c1.274 4.057 5.065 7 9.542 7 4.477 0 8.268-2.943 9.542-7-1.274-4.057-5.065-7-9.542-7-4.477 0-8.268 2.943-9.542 7z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="w-1/2 rounded-xl border border-slate-800 bg-slate-950 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-900 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingProfile}
+                  className="w-1/2 rounded-xl bg-cyan-500 py-2.5 text-xs font-black text-slate-950 hover:bg-cyan-400 transition disabled:opacity-50"
+                >
+                  {isUpdatingProfile ? 'Saving...' : 'Save Profile'}
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
