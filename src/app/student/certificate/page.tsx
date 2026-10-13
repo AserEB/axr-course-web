@@ -9,6 +9,7 @@ export default function CertificatePage() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [cert, setCert] = useState<Certificate | null>(null);
+  const [imgSrc, setImgSrc] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleSearchCert = async (e: React.FormEvent) => {
@@ -19,20 +20,55 @@ export default function CertificatePage() {
     setErrorMsg('');
     setCert(null);
 
-    const clean = query.trim().toUpperCase();
+    const clean = query.trim();
+    const isNumeric = /^\d+$/.test(clean);
+    const numValue = isNumeric ? Number(clean) : 0;
 
     try {
-      // Search certificate by certificate_id or user_id
-      const { data, error } = await supabase
+      // 1. First, search in 'certificates' database table
+      const { data: certData } = await supabase
         .from('certificates')
         .select('*')
-        .or(`certificate_id.ilike.${clean},user_id.eq.${isNaN(Number(clean)) ? 0 : Number(clean)}`)
+        .or(`certificate_id.ilike.${clean},user_id.eq.${numValue}`)
         .maybeSingle();
 
-      if (error || !data) {
-        setErrorMsg('ሰርተፊኬቱ አልተገኘም። እባክዎ Credential ID (e.g., AXR-R2-5570011875) በትክክል ያስገቡ።');
+      if (certData) {
+        const foundCert = certData as Certificate;
+        setCert(foundCert);
+        setImgSrc(foundCert.image_url);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Dynamic Fallback: Search in 'students' table & generate storage link matching Student ID
+      let studentQuery = supabase.from('students').select('*');
+      if (isNumeric) {
+        studentQuery = studentQuery.or(`user_id.eq.${numValue},student_custom_id.ilike.${clean},phone.ilike.${clean}`);
       } else {
-        setCert(data as Certificate);
+        studentQuery = studentQuery.or(`student_custom_id.ilike.${clean},phone.ilike.${clean}`);
+      }
+
+      const { data: studentData } = await studentQuery.maybeSingle();
+
+      if (studentData) {
+        const targetId = studentData.student_custom_id || String(studentData.user_id);
+        const storageBaseUrl = 'https://tjfroaccfbtpovivsrxr.supabase.co/storage/v1/object/public/certificates';
+        const dynamicUrl = `${storageBaseUrl}/${targetId}.png`;
+
+        const dynamicCert: Certificate = {
+          certificate_id: targetId,
+          user_id: studentData.user_id,
+          student_name: studentData.full_name,
+          course_name: 'Prompt Engineering & AI Tools',
+          round: studentData.round || 2,
+          issued_date: studentData.created_at ? studentData.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+          image_url: dynamicUrl,
+        };
+
+        setCert(dynamicCert);
+        setImgSrc(dynamicUrl);
+      } else {
+        setErrorMsg('ሰርተፊኬት ወይም ተማሪ አልተገኘም። እባክዎ Credential ID ወይም Student ID በትክክል ያስገቡ።');
       }
     } catch {
       setErrorMsg('ስህተት አጋጥሟል። እባክዎ ደግመው ይሞክሩ።');
@@ -41,8 +77,18 @@ export default function CertificatePage() {
     }
   };
 
+  const handleImageError = () => {
+    // Fallback logic: If .png image is not found, automatically try loading .jpg
+    if (imgSrc.endsWith('.png')) {
+      setImgSrc(imgSrc.replace('.png', '.jpg'));
+    } else {
+      setErrorMsg('የተማሪው መረጃ ተገኝቷል፤ ነገር ግን የሰርተፊኬት ፎቶው በ Storage ላይ አልተጫነም።');
+      setCert(null);
+    }
+  };
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:py-16 space-y-8 animate-fade-in-up">
+    <div className="mx-auto max-w-3xl px-4 py-10 sm:py-16 space-y-8 animate-fade-in-up text-slate-100 min-h-screen">
 
       {/* Header */}
       <div className="text-center space-y-3">
@@ -53,7 +99,7 @@ export default function CertificatePage() {
         </div>
         <h1 className="text-2xl sm:text-4xl font-black text-slate-100">Official Certificate Portal</h1>
         <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto">
-          የሰርተፊኬቱን Credential ID በማስገባት ትክክለኛነቱን ያረጋግጡ እና በ HD ጥራት ያውርዱ
+          የተማሪ መታወቂያዎን (Student ID) ወይም Credential ID በማስገባት ሰርተፊኬትዎን በ HD ጥራት ያውርዱ
         </p>
       </div>
 
@@ -63,7 +109,7 @@ export default function CertificatePage() {
           <input
             type="text"
             required
-            placeholder="e.g. AXR-R2-5570011875 or Student ID"
+            placeholder="e.g. AXR-STU-5082 or AXR-R2-5570011875"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="w-full rounded-2xl border border-slate-800 bg-slate-950/90 px-5 py-3.5 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400 transition"
@@ -72,7 +118,7 @@ export default function CertificatePage() {
         <button
           type="submit"
           disabled={loading}
-          className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-600 px-7 py-3.5 text-xs font-black text-slate-950 shadow-[0_0_20px_rgba(56,189,248,0.25)] transition-all duration-300 hover:scale-[1.02] disabled:opacity-50"
+          className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-600 px-7 py-3.5 text-xs font-black text-slate-950 shadow-[0_0_20px_rgba(56,189,248,0.25)] transition-all duration-300 hover:scale-[1.02] disabled:opacity-50 shrink-0"
         >
           <svg className="h-4 w-4 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -93,7 +139,7 @@ export default function CertificatePage() {
 
       {/* Certificate Result Card */}
       {cert && (
-        <div className="glass-card-pro rounded-3xl p-6 sm:p-8 backdrop-blur-2xl space-y-6 border-emerald-500/40 shadow-[0_0_40px_rgba(16,185,129,0.15)] animate-fade-in-up">
+        <div className="glass-card-pro rounded-3xl p-6 sm:p-8 backdrop-blur-2xl space-y-6 border border-emerald-500/40 bg-slate-900 shadow-[0_0_40px_rgba(16,185,129,0.15)] animate-fade-in-up">
           <div className="flex items-center justify-between border-b border-slate-800 pb-4">
             <div className="flex items-center gap-2">
               <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -101,7 +147,7 @@ export default function CertificatePage() {
                 OFFICIAL VERIFIED CREDENTIAL
               </span>
             </div>
-            <span className="text-xs font-mono font-bold text-slate-400 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1">
+            <span className="text-xs font-mono font-bold text-slate-400 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1">
               Round {cert.round}
             </span>
           </div>
@@ -117,22 +163,24 @@ export default function CertificatePage() {
           </div>
 
           {/* Certificate Image Preview */}
-          {cert.image_url && (
-            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-emerald-500/30 bg-slate-950 image-glow-hover">
+          {imgSrc && (
+            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-emerald-500/30 bg-slate-950">
               <Image
-                src={cert.image_url}
+                src={imgSrc}
                 alt={cert.student_name}
                 fill
+                unoptimized
                 className="object-contain"
+                onError={handleImageError}
               />
             </div>
           )}
 
           <div className="pt-2">
             <a
-              href={cert.image_url}
+              href={imgSrc}
               target="_blank"
-              download
+              download={`${cert.certificate_id}_Certificate`}
               rel="noreferrer"
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 py-3.5 text-xs font-black text-slate-950 transition hover:bg-emerald-300 hover:scale-[1.01] shadow-lg shadow-emerald-500/20"
             >

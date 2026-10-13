@@ -51,25 +51,25 @@ export default function StudentDashboardPage() {
         setEditPhone(studentProfile.phone || '');
         setEditPassword(studentProfile.password_hash || '');
 
-        // 2. Flexible Real-Time Referral Tracking (Phase 4)
-        // Matches referred_by using user_id, custom_id, or phone number
+        // 2. Flexible Real-Time Referral Tracking
+        // Matches referred_by safely using user_id, custom_id, or phone number
         const userIdStr = String(studentProfile.user_id);
-        const customIdStr = studentProfile.student_custom_id || '';
-        const phoneStr = studentProfile.phone || '';
+        const customIdStr = (studentProfile.student_custom_id || '').trim();
+        const phoneStr = (studentProfile.phone || '').trim();
 
-        const orConditions = [
-          `referred_by.eq.${userIdStr}`,
-          customIdStr ? `referred_by.eq.${customIdStr}` : null,
-          phoneStr ? `referred_by.eq.${phoneStr}` : null,
-        ].filter(Boolean).join(',');
+        const conditions = [`referred_by.eq.${userIdStr}`];
+        if (customIdStr) conditions.push(`referred_by.eq.${customIdStr}`);
+        if (phoneStr) conditions.push(`referred_by.eq.${phoneStr}`);
 
-        const { data: referrals } = await supabase
+        const { data: referrals, error: refError } = await supabase
           .from('students')
           .select('*')
-          .or(orConditions);
+          .or(conditions.join(','));
 
-        if (referrals) {
+        if (!refError && referrals) {
           setInvitedStudents(referrals as Student[]);
+        } else if (refError) {
+          console.warn('Referral Query Warning:', refError.message);
         }
       } catch (err) {
         console.error('Error loading student dashboard:', err);
