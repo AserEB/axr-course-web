@@ -15,7 +15,7 @@ export default function StudentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Profile Edit & Password Reveal State (4ኛ)
+  // Profile Edit & Password Reveal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [editFullName, setEditFullName] = useState('');
@@ -51,11 +51,22 @@ export default function StudentDashboardPage() {
         setEditPhone(studentProfile.phone || '');
         setEditPassword(studentProfile.password_hash || '');
 
-        // 2. Fetch list of friends invited by this student
+        // 2. Flexible Real-Time Referral Tracking (Phase 4)
+        // Matches referred_by using user_id, custom_id, or phone number
+        const userIdStr = String(studentProfile.user_id);
+        const customIdStr = studentProfile.student_custom_id || '';
+        const phoneStr = studentProfile.phone || '';
+
+        const orConditions = [
+          `referred_by.eq.${userIdStr}`,
+          customIdStr ? `referred_by.eq.${customIdStr}` : null,
+          phoneStr ? `referred_by.eq.${phoneStr}` : null,
+        ].filter(Boolean).join(',');
+
         const { data: referrals } = await supabase
           .from('students')
           .select('*')
-          .eq('referred_by', Number(storedUserId));
+          .or(orConditions);
 
         if (referrals) {
           setInvitedStudents(referrals as Student[]);
@@ -139,7 +150,7 @@ export default function StudentDashboardPage() {
   const verifiedInvites = invitedStudents.filter((s) => s.status === 'Verified').length;
   const discountInfo = calculateUserDiscount(verifiedInvites, invitedStudents.length, SITE_CONFIG.courseFee);
 
-  const referralShareUrl = `${SITE_CONFIG.siteUrl}/register?ref=${student.student_custom_id || student.user_id}`;
+  const referralShareUrl = `${SITE_CONFIG.siteUrl}/register?ref=${student.student_custom_id || student.phone || student.user_id}`;
 
   const copyReferralLink = () => {
     navigator.clipboard.writeText(referralShareUrl);
@@ -289,7 +300,7 @@ export default function StudentDashboardPage() {
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
               </svg>
-              <span>Edit Profile & Password (4ኛ)</span>
+              <span>Edit Profile & Password</span>
             </button>
           </div>
         </div>
@@ -385,7 +396,7 @@ export default function StudentDashboardPage() {
 
       </div>
 
-      {/* STUDENT EDIT PROFILE & PASSWORD MODAL (4ኛ) */}
+      {/* STUDENT EDIT PROFILE & PASSWORD MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-2xl transition-all">
           <div className="glass-card-pro max-w-md w-full rounded-3xl p-6 border border-cyan-500/40 bg-slate-900 space-y-5">
@@ -435,7 +446,7 @@ export default function StudentDashboardPage() {
                 />
               </div>
 
-              {/* Password Eye Icon Reveal (4ኛ) */}
+              {/* Password Eye Icon Reveal */}
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-300">My Password</label>
                 <div className="relative mt-1.5">

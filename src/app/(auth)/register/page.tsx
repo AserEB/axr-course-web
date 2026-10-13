@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { SITE_CONFIG, BANK_ACCOUNTS } from '@/lib/constants';
-import { calculateUserDiscount } from '@/lib/discountEngine';
+import { calculateUserDiscount, generatePreRegReferralLink } from '@/lib/discountEngine';
 import {
     generateStudentCustomId,
     generateNumericUserId,
@@ -24,6 +24,11 @@ function RegisterFormContent() {
     const [isRegistrationOpen, setIsRegistrationOpen] = useState<boolean>(true);
     const [checkingSettings, setCheckingSettings] = useState<boolean>(true);
 
+    // Pre-Registration Referral Link Generator State (Phase 4)
+    const [preRegInput, setPreRegInput] = useState('');
+    const [generatedLink, setGeneratedLink] = useState('');
+    const [copiedPreReg, setCopiedPreReg] = useState(false);
+
     // Form State
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -38,12 +43,12 @@ function RegisterFormContent() {
     const [password, setPassword] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<'CBE' | 'Telebirr'>('CBE');
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
-    const [referredBy, setReferredBy] = useState<number | null>(null);
+    const [referredBy, setReferredBy] = useState<string | number | null>(null);
 
     // Completed State
     const [generatedCustomId, setGeneratedCustomId] = useState('');
 
-    // 1. Check if Registration is Open & Read Referred By Link
+    // 1. Check if Registration is Open & Capture Incoming Ref Query Parameter
     useEffect(() => {
         async function checkRegistrationStatus() {
             try {
@@ -67,16 +72,40 @@ function RegisterFormContent() {
 
         checkRegistrationStatus();
 
+        // Capture Incoming Referral Code (Phone, ID, or Username)
         const refParam = searchParams.get('ref');
         if (refParam) {
-            const cleanRef = refParam.replace('ref_', '').replace('AXR-STU-', '');
-            if (!isNaN(Number(cleanRef))) {
-                setReferredBy(Number(cleanRef));
+            const cleanRef = refParam.replace('ref_', '').replace('AXR-STU-', '').trim();
+            if (cleanRef) {
+                setReferredBy(cleanRef);
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('axr_referred_by_code', cleanRef);
+                }
+            }
+        } else if (typeof window !== 'undefined') {
+            const storedRef = localStorage.getItem('axr_referred_by_code');
+            if (storedRef) {
+                setReferredBy(storedRef);
             }
         }
     }, [searchParams]);
 
     const discountInfo = calculateUserDiscount(0, 0, SITE_CONFIG.courseFee);
+
+    // Generate Pre-Registration Referral Link Action
+    const handleGeneratePreRegLink = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!preRegInput.trim()) return;
+        const link = generatePreRegReferralLink(preRegInput.trim());
+        setGeneratedLink(link);
+    };
+
+    const copyPreRegLink = () => {
+        if (!generatedLink) return;
+        navigator.clipboard.writeText(generatedLink);
+        setCopiedPreReg(true);
+        setTimeout(() => setCopiedPreReg(false), 3000);
+    };
 
     const handleCopyAccount = (accNumber: string) => {
         navigator.clipboard.writeText(accNumber);
@@ -167,8 +196,6 @@ function RegisterFormContent() {
                         .from('receipts')
                         .getPublicUrl(filePath);
                     publicReceiptUrl = publicUrlData.publicUrl;
-                } else {
-                    console.warn('Storage Upload Notice:', uploadError.message);
                 }
             } catch (storageErr) {
                 console.warn('Storage Connection Notice:', storageErr);
@@ -177,7 +204,7 @@ function RegisterFormContent() {
             const numericUserId = generateNumericUserId();
             const customId = generateStudentCustomId();
 
-            // Fetch Current Active Round Dynamically (10ኛ)
+            // Fetch Current Active Round Dynamically
             let currentRound = 2;
             try {
                 const { data: settingsData } = await supabase
@@ -205,7 +232,7 @@ function RegisterFormContent() {
                 screenshot_file_id: publicReceiptUrl,
                 status: 'Pending',
                 round: currentRound,
-                referred_by: referredBy,
+                referred_by: referredBy ? String(referredBy) : null,
             };
 
             const { error: insertError } = await supabase
@@ -235,7 +262,7 @@ function RegisterFormContent() {
     if (checkingSettings) {
         return (
             <div className="mx-auto max-w-xl px-4 py-20 text-center animate-fade-in-up">
-                <div className="glass-card-pro space-y-3 rounded-3xl p-8">
+                <div className="glass-card-pro space-y-3 rounded-3xl p-8 border border-slate-800 bg-slate-900">
                     <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
                     <p className="font-mono text-xs font-bold uppercase text-cyan-400">
                         የምዝገባ ሁኔታ በማረጋገጥ ላይ...
@@ -248,7 +275,7 @@ function RegisterFormContent() {
     if (!isRegistrationOpen) {
         return (
             <div className="mx-auto max-w-lg px-4 py-16 animate-fade-in-up">
-                <div className="glass-card-pro space-y-6 rounded-3xl border border-rose-500/30 p-8 text-center shadow-[0_0_40px_rgba(244,63,94,0.15)] sm:p-10">
+                <div className="glass-card-pro space-y-6 rounded-3xl border border-rose-500/30 p-8 text-center shadow-[0_0_40px_rgba(244,63,94,0.15)] bg-slate-900 sm:p-10">
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-rose-500/40 bg-rose-950/40 text-rose-400">
                         <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
@@ -286,7 +313,64 @@ function RegisterFormContent() {
     }
 
     return (
-        <div className="mx-auto max-w-2xl px-4 py-10 animate-fade-in-up sm:py-16">
+        <div className="mx-auto max-w-2xl px-4 py-10 animate-fade-in-up sm:py-16 text-slate-100 min-h-screen">
+
+            {/* PRE-REGISTRATION REFERRAL LINK GENERATOR CARD (Phase 4) */}
+            <div className="mb-8 glass-card-pro rounded-3xl p-6 border border-cyan-500/30 bg-slate-900/90 space-y-4 shadow-[0_0_30px_rgba(56,189,248,0.1)]">
+                <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-950 border border-cyan-500/40 text-cyan-400 font-bold">
+                        🎁
+                    </div>
+                    <div>
+                        <h2 className="text-sm font-extrabold text-slate-100 uppercase tracking-wider">
+                            ሳይመዘገቡ ቅናሽ ያግኙ! (Pre-Registration Referral)
+                        </h2>
+                        <p className="text-[11px] text-slate-400">
+                            ሳይመዘገቡ በፊት የስልክ ቁጥርዎን በማስገባት የመጋበዣ ሊንክዎን አሁኑኑ ማፍራት ይችላሉ።
+                        </p>
+                    </div>
+                </div>
+
+                <form onSubmit={handleGeneratePreRegLink} className="flex gap-2">
+                    <input
+                        type="text"
+                        required
+                        placeholder="የስልክ ቁጥርዎ ወይም Username (ለምሳሌ፦ 0912345678)"
+                        value={preRegInput}
+                        onChange={(e) => setPreRegInput(e.target.value)}
+                        className="flex-1 rounded-xl border border-slate-800 bg-slate-950 px-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition"
+                    />
+                    <button
+                        type="submit"
+                        className="rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-black text-slate-950 transition hover:bg-cyan-400 shrink-0"
+                    >
+                        Generate Link
+                    </button>
+                </form>
+
+                {generatedLink && (
+                    <div className="space-y-2 pt-1">
+                        <p className="text-[10px] font-mono font-bold text-emerald-400 uppercase">የእርስዎ መጋበዣ ሊንክ ተዘጋጅቷል፦</p>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="text"
+                                readOnly
+                                value={generatedLink}
+                                className="w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 font-mono text-xs text-cyan-400 focus:outline-none"
+                            />
+                            <button
+                                type="button"
+                                onClick={copyPreRegLink}
+                                className="rounded-xl bg-emerald-400 px-4 py-2 text-xs font-black text-slate-950 hover:bg-emerald-300 transition shrink-0"
+                            >
+                                {copiedPreReg ? 'Copied!' : 'Copy Link'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Registration Header */}
             <div className="mb-8 space-y-3 text-center">
                 <h1 className="text-2xl font-black text-slate-100 sm:text-4xl">
                     የኮርስ ምዝገባ (Course Registration)
@@ -294,6 +378,12 @@ function RegisterFormContent() {
                 <p className="text-xs text-slate-400 sm:text-sm">
                     {SITE_CONFIG.courseName} | 1 ወር ጥልቅ ስልጠና
                 </p>
+
+                {referredBy && (
+                    <div className="inline-block rounded-full bg-emerald-950/60 border border-emerald-500/40 px-4 py-1 text-xs font-mono text-emerald-300">
+                        🎉 በጋባዥ ኮድ፦ <b className="text-white">{referredBy}</b> እየተመዘገቡ ነው!
+                    </div>
+                )}
 
                 {step <= 4 && (
                     <div className="mt-6 flex items-center justify-center gap-2">
@@ -323,7 +413,7 @@ function RegisterFormContent() {
 
             {/* STEP 1 */}
             {step === 1 && (
-                <form onSubmit={handleNextStep1} className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 p-6 sm:p-8">
+                <form onSubmit={handleNextStep1} className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 bg-slate-900 p-6 sm:p-8">
                     <div className="flex items-center gap-2.5 border-b border-slate-800 pb-4">
                         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 font-mono text-xs font-black text-cyan-400">
                             1
@@ -389,7 +479,7 @@ function RegisterFormContent() {
 
             {/* STEP 2 */}
             {step === 2 && (
-                <form onSubmit={handleNextStep2} className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 p-6 sm:p-8">
+                <form onSubmit={handleNextStep2} className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 bg-slate-900 p-6 sm:p-8">
                     <div className="flex items-center gap-2.5 border-b border-slate-800 pb-4">
                         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 font-mono text-xs font-black text-cyan-400">
                             2
@@ -464,7 +554,7 @@ function RegisterFormContent() {
 
             {/* STEP 3 */}
             {step === 3 && (
-                <div className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 p-6 sm:p-8">
+                <div className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 bg-slate-900 p-6 sm:p-8">
                     <div className="flex items-center gap-2.5 border-b border-slate-800 pb-4">
                         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 font-mono text-xs font-black text-cyan-400">
                             3
@@ -568,7 +658,7 @@ function RegisterFormContent() {
 
             {/* STEP 4 */}
             {step === 4 && (
-                <form onSubmit={handleSubmitRegistration} className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 p-6 sm:p-8">
+                <form onSubmit={handleSubmitRegistration} className="glass-card-pro space-y-6 rounded-3xl border border-cyan-500/30 bg-slate-900 p-6 sm:p-8">
                     <div className="flex items-center gap-2.5 border-b border-slate-800 pb-4">
                         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 font-mono text-xs font-black text-cyan-400">
                             4
@@ -648,7 +738,7 @@ function RegisterFormContent() {
 
             {/* STEP 5 */}
             {step === 5 && (
-                <div className="glass-card-pro space-y-6 rounded-3xl border border-emerald-500/40 p-8 text-center shadow-[0_0_40px_rgba(16,185,129,0.15)] animate-fade-in-up sm:p-12">
+                <div className="glass-card-pro space-y-6 rounded-3xl border border-emerald-500/40 bg-slate-900 p-8 text-center shadow-[0_0_40px_rgba(16,185,129,0.15)] animate-fade-in-up sm:p-12">
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/40 bg-emerald-950/40 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)]">
                         <svg className="h-8 w-8 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -700,7 +790,7 @@ export default function RegisterPage() {
         <Suspense
             fallback={
                 <div className="mx-auto max-w-2xl px-4 py-20 text-center animate-fade-in-up">
-                    <div className="glass-card-pro space-y-3 rounded-3xl p-8">
+                    <div className="glass-card-pro space-y-3 rounded-3xl p-8 border border-slate-800 bg-slate-900">
                         <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
                         <p className="font-mono text-xs font-bold uppercase text-cyan-400">
                             መረጃው እየተጫነ ነው...
