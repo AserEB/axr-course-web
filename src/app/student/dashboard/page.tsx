@@ -51,32 +51,56 @@ export default function StudentDashboardPage() {
         setEditPhone(studentProfile.phone || '');
         setEditPassword(studentProfile.password_hash || '');
 
-        // 2. Fail-Safe Multi-Match Referral Tracking
+        // 2. Comprehensive Multi-Identifier Referral Tracking
+        // Collect all possible identifiers the referrer could have used in the ?ref= parameter:
         const rawCustomId = (studentProfile.student_custom_id || '').trim();
-        const cleanCustomId = rawCustomId.replace('AXR-STU-', '').trim();
+        const cleanCustomId = rawCustomId.replace(/^AXR-STU-/i, '').trim();
         const rawUserId = String(studentProfile.user_id).trim();
         const rawPhone = (studentProfile.phone || '').trim();
+        const rawUsername = (studentProfile.username || '').trim();
+        const emailPrefix = (studentProfile.email || '').split('@')[0].trim();
 
-        // Extract last 9 digits of phone to match any format (e.g., 0991076523 or +251991076523 -> 991076523)
+        // Phone variations (e.g., 0991076523, +251991076523, 991076523)
         const phoneDigits = rawPhone.replace(/\D/g, '');
         const phoneLast9 = phoneDigits.length >= 9 ? phoneDigits.slice(-9) : phoneDigits;
+        const phoneWith0 = phoneLast9 ? `0${phoneLast9}` : '';
+        const phoneWith251 = phoneLast9 ? `+251${phoneLast9}` : '';
 
-        // Build search conditions for Custom ID, Stripped ID, User ID, and Phone variations
+        // Combine all possible referral terms (filter out short strings to avoid false matches)
         const searchTerms = Array.from(
-          new Set([rawCustomId, cleanCustomId, rawUserId, rawPhone, phoneLast9])
-        ).filter(Boolean);
+          new Set([
+            rawCustomId,
+            cleanCustomId,
+            rawUserId,
+            rawPhone,
+            phoneLast9,
+            phoneWith0,
+            phoneWith251,
+            rawUsername,
+            emailPrefix,
+          ])
+        ).filter((term) => term && term.length >= 3);
 
-        const orConditions = searchTerms.map((term) => `referred_by.ilike.%${term}%`).join(',');
+        if (searchTerms.length > 0) {
+          const orConditions = searchTerms.map((term) => `referred_by.ilike.%${term}%`).join(',');
 
-        const { data: referrals, error: refError } = await supabase
-          .from('students')
-          .select('*')
-          .or(orConditions);
+          const { data: referrals, error: refError } = await supabase
+            .from('students')
+            .select('*')
+            .or(orConditions);
 
-        if (!refError && referrals) {
-          setInvitedStudents(referrals as Student[]);
-        } else if (refError) {
-          console.warn('Referral Query Warning:', refError.message);
+          if (!refError && referrals) {
+            // Deduplicate referred students by user_id & exclude self-referrals
+            const uniqueReferralsMap = new Map<number, Student>();
+            (referrals as Student[]).forEach((refStudent) => {
+              if (refStudent.user_id !== studentProfile.user_id) {
+                uniqueReferralsMap.set(refStudent.user_id, refStudent);
+              }
+            });
+            setInvitedStudents(Array.from(uniqueReferralsMap.values()));
+          } else if (refError) {
+            console.warn('Referral Query Warning:', refError.message);
+          }
         }
       } catch (err) {
         console.error('Error loading student dashboard:', err);
