@@ -51,15 +51,16 @@ export default function StudentDashboardPage() {
         setEditPhone(studentProfile.phone || '');
         setEditPassword(studentProfile.password_hash || '');
 
-        // 2. Flexible Real-Time Referral Tracking
-        // Matches referred_by safely using user_id, custom_id, or phone number
-        const userIdStr = String(studentProfile.user_id);
+        // 2. Comprehensive Multi-Format Referral Tracking using .ilike
+        const userIdStr = String(studentProfile.user_id).trim();
         const customIdStr = (studentProfile.student_custom_id || '').trim();
+        const strippedId = customIdStr.replace('AXR-STU-', '').trim();
         const phoneStr = (studentProfile.phone || '').trim();
 
-        const conditions = [`referred_by.eq.${userIdStr}`];
-        if (customIdStr) conditions.push(`referred_by.eq.${customIdStr}`);
-        if (phoneStr) conditions.push(`referred_by.eq.${phoneStr}`);
+        const conditions = [`referred_by.ilike.${userIdStr}`];
+        if (customIdStr) conditions.push(`referred_by.ilike.${customIdStr}`);
+        if (strippedId && strippedId !== customIdStr) conditions.push(`referred_by.ilike.${strippedId}`);
+        if (phoneStr) conditions.push(`referred_by.ilike.${phoneStr}`);
 
         const { data: referrals, error: refError } = await supabase
           .from('students')
