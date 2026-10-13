@@ -40,26 +40,29 @@ export default function AdminDashboardPage() {
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch system settings
-      const { data: settingsData } = await supabase.from('settings').select('*');
-      if (settingsData) {
+      // 1. Fetch system settings safely
+      const { data: settingsData, error: settingsErr } = await supabase.from('settings').select('*');
+      if (!settingsErr && settingsData) {
         settingsData.forEach((item) => {
-          if (item.key === 'current_round') setCurrentRound(Number(item.value));
-          if (item.key === 'is_registration_active') setIsRegActive(item.value === 'true');
+          if (item.key === 'current_round' && item.value) setCurrentRound(Number(item.value));
+          if (item.key === 'is_registration_active' && item.value) setIsRegActive(item.value === 'true');
         });
       }
 
-      // 2. Fetch all students
-      const { data: studentsData } = await supabase
+      // 2. Fetch all students safely
+      const { data: studentsData, error: studentsErr } = await supabase
         .from('students')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (studentsData) {
+      if (!studentsErr && studentsData) {
         setStudents(studentsData as Student[]);
+      } else {
+        setStudents([]);
       }
     } catch (err) {
-      console.error('Failed to fetch admin data:', err);
+      console.error('Failed to fetch admin data safely:', err);
+      setStudents([]);
     } finally {
       setLoading(false);
     }
@@ -81,8 +84,8 @@ export default function AdminDashboardPage() {
 
   if (!mounted) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-3">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+      <div className="flex min-h-[70vh] flex-col items-center justify-center space-y-4 bg-slate-950 text-slate-100">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" />
         <p className="font-mono text-xs font-bold uppercase tracking-wider text-cyan-400">
           Loading Control Panel...
         </p>
@@ -94,19 +97,27 @@ export default function AdminDashboardPage() {
   const toggleRegistrationStatus = async () => {
     const nextStatus = !isRegActive;
     setIsRegActive(nextStatus);
-    await supabase.from('settings').upsert({
-      key: 'is_registration_active',
-      value: String(nextStatus),
-    });
+    try {
+      await supabase.from('settings').upsert({
+        key: 'is_registration_active',
+        value: String(nextStatus),
+      });
+    } catch (e) {
+      console.error('Toggle status error:', e);
+    }
   };
 
   // Change Active Round
   const changeRound = async (newRound: number) => {
     setCurrentRound(newRound);
-    await supabase.from('settings').upsert({
-      key: 'current_round',
-      value: String(newRound),
-    });
+    try {
+      await supabase.from('settings').upsert({
+        key: 'current_round',
+        value: String(newRound),
+      });
+    } catch (e) {
+      console.error('Change round error:', e);
+    }
   };
 
   // Handle Approve / Verify Student
@@ -115,7 +126,6 @@ export default function AdminDashboardPage() {
 
     setActionLoading(true);
     try {
-      // 1. Update Student status in Supabase
       const { error } = await supabase
         .from('students')
         .update({
@@ -127,7 +137,6 @@ export default function AdminDashboardPage() {
 
       if (error) throw new Error(error.message);
 
-      // 2. Send Email Notification via Resend
       if (verifyingStudent.email) {
         await sendStudentStatusEmail({
           toEmail: verifyingStudent.email,
@@ -155,7 +164,6 @@ export default function AdminDashboardPage() {
 
     setActionLoading(true);
     try {
-      // 1. Update Student status in Supabase
       const { error } = await supabase
         .from('students')
         .update({
@@ -167,7 +175,6 @@ export default function AdminDashboardPage() {
 
       if (error) throw new Error(error.message);
 
-      // 2. Send Email Notification via Resend
       if (discardingStudent.email) {
         await sendStudentStatusEmail({
           toEmail: discardingStudent.email,
@@ -189,27 +196,27 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Filtered Students List
-  const filteredStudents = students.filter((s) => {
+  // Filtered Students List safely
+  const filteredStudents = (students || []).filter((s) => {
+    if (!s) return false;
     const matchesStatus = statusFilter === 'ALL' || s.status === statusFilter;
     const cleanSearch = searchTerm.trim().toLowerCase();
     const matchesSearch =
       !cleanSearch ||
-      s.full_name.toLowerCase().includes(cleanSearch) ||
-      s.phone.includes(cleanSearch) ||
-      s.email.toLowerCase().includes(cleanSearch) ||
+      (s.full_name && s.full_name.toLowerCase().includes(cleanSearch)) ||
+      (s.phone && s.phone.includes(cleanSearch)) ||
+      (s.email && s.email.toLowerCase().includes(cleanSearch)) ||
       (s.student_custom_id && s.student_custom_id.toLowerCase().includes(cleanSearch));
 
     return matchesStatus && matchesSearch;
   });
 
-  // Statistics
-  const totalCount = students.length;
-  const verifiedCount = students.filter((s) => s.status === 'Verified').length;
-  const pendingCount = students.filter((s) => s.status === 'Pending').length;
+  const totalCount = (students || []).length;
+  const verifiedCount = (students || []).filter((s) => s?.status === 'Verified').length;
+  const pendingCount = (students || []).filter((s) => s?.status === 'Pending').length;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:py-12 space-y-8 animate-fade-in-up">
+    <div className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:py-12 space-y-8 text-slate-100 animate-fade-in-up">
 
       {/* Top Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800 pb-6">
@@ -263,7 +270,7 @@ export default function AdminDashboardPage() {
 
       {/* SYSTEM CONTROLS & STATS */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="glass-card-pro rounded-2xl p-5 space-y-2 border-cyan-500/20">
+        <div className="glass-card-pro rounded-2xl p-5 space-y-2 border-cyan-500/20 bg-slate-900/80">
           <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
             Active Batch / Round
           </span>
@@ -286,7 +293,7 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="glass-card-pro rounded-2xl p-5 space-y-2 border-cyan-500/20">
+        <div className="glass-card-pro rounded-2xl p-5 space-y-2 border-cyan-500/20 bg-slate-900/80">
           <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
             Portal Status
           </span>
@@ -306,14 +313,14 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="glass-card-pro rounded-2xl p-5 space-y-1 border-amber-500/20">
+        <div className="glass-card-pro rounded-2xl p-5 space-y-1 border-amber-500/20 bg-slate-900/80">
           <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
             Pending Review
           </span>
           <p className="font-mono text-2xl font-black text-amber-400">{pendingCount}</p>
         </div>
 
-        <div className="glass-card-pro rounded-2xl p-5 space-y-1 border-emerald-500/20">
+        <div className="glass-card-pro rounded-2xl p-5 space-y-1 border-emerald-500/20 bg-slate-900/80">
           <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">
             Total Verified
           </span>
@@ -322,8 +329,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* FILTER & SEARCH BAR */}
-      <div className="glass-card-pro flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl p-4 border-cyan-500/20">
-        {/* Status Filter Buttons */}
+      <div className="glass-card-pro flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl p-4 border-cyan-500/20 bg-slate-900/80">
         <div className="flex flex-wrap gap-2 text-xs font-bold">
           {(['ALL', 'Pending', 'Verified', 'Discard'] as const).map((st) => (
             <button
@@ -339,7 +345,6 @@ export default function AdminDashboardPage() {
           ))}
         </div>
 
-        {/* Search Input */}
         <div className="relative w-full sm:w-72">
           <svg className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-500 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -355,7 +360,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* STUDENTS TABLE */}
-      <div className="glass-card-pro overflow-hidden rounded-3xl border-cyan-500/20">
+      <div className="glass-card-pro overflow-hidden rounded-3xl border-cyan-500/20 bg-slate-900/80">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="border-b border-slate-800 bg-slate-950/90 text-slate-400 uppercase font-mono text-[10px] tracking-wider">
@@ -370,20 +375,20 @@ export default function AdminDashboardPage() {
             <tbody className="divide-y divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="p-12 text-center text-slate-500 font-mono">
+                  <td colSpan={5} className="p-12 text-center text-slate-400 font-mono">
                     <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent mb-2" />
                     መረጃው እየተጫነ ነው...
                   </td>
                 </tr>
               ) : filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-12 text-center text-slate-500">
+                  <td colSpan={5} className="p-12 text-center text-slate-400">
                     ምንም የተገኘ ተማሪ የለም።
                   </td>
                 </tr>
               ) : (
                 filteredStudents.map((st) => (
-                  <tr key={st.user_id} className="transition hover:bg-slate-900/60">
+                  <tr key={st.user_id} className="transition hover:bg-slate-900/90">
                     <td className="p-4">
                       <p className="font-bold text-slate-100">{st.full_name}</p>
                       <p className="font-mono text-[11px] text-cyan-400 font-semibold">{st.student_custom_id || `ID: ${st.user_id}`}</p>
@@ -457,7 +462,7 @@ export default function AdminDashboardPage() {
       {/* RECEIPT VIEW MODAL */}
       {selectedReceiptUrl && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-2xl transition-all">
-          <div className="glass-card-pro relative max-w-xl w-full max-h-[85vh] rounded-3xl p-5 border-cyan-500/40 space-y-4">
+          <div className="glass-card-pro relative max-w-xl w-full max-h-[85vh] rounded-3xl p-5 border-cyan-500/40 bg-slate-900 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-mono text-slate-200 uppercase tracking-wider">
                 Receipt Image Preview
@@ -482,7 +487,7 @@ export default function AdminDashboardPage() {
       {/* VERIFY MODAL */}
       {verifyingStudent && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-2xl transition-all">
-          <div className="glass-card-pro max-w-md w-full rounded-3xl p-6 space-y-5 border-emerald-500/40">
+          <div className="glass-card-pro max-w-md w-full rounded-3xl p-6 space-y-5 border-emerald-500/40 bg-slate-900">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
               <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
               <h3 className="text-sm font-bold font-mono text-emerald-400 uppercase tracking-wider">
@@ -522,7 +527,7 @@ export default function AdminDashboardPage() {
       {/* DISCARD MODAL */}
       {discardingStudent && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-2xl transition-all">
-          <div className="glass-card-pro max-w-md w-full rounded-3xl p-6 space-y-5 border-rose-500/40">
+          <div className="glass-card-pro max-w-md w-full rounded-3xl p-6 space-y-5 border-rose-500/40 bg-slate-900">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
               <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
               <h3 className="text-sm font-bold font-mono text-rose-400 uppercase tracking-wider">
