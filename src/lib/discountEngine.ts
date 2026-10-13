@@ -9,14 +9,18 @@ export interface DiscountResult {
     pending_count: number;
 }
 
+/**
+ * Calculates user discount percentage, earned coins, and remaining payable course fee.
+ */
 export function calculateUserDiscount(
     verifiedInvites: number = 0,
     totalInvites: number = 0,
-    baseFee: number = SITE_CONFIG.courseFee || 700
+    baseFee: number = SITE_CONFIG.courseFee || 1000
 ): DiscountResult {
     const safeVerified = Math.max(0, verifiedInvites || 0);
     const safeTotal = Math.max(0, totalInvites || 0);
 
+    // Max 10 coins = 100% Discount (Free Course)
     const coins = Math.min(safeVerified, 10);
     const percent = coins * 10;
     const discountAmount = (baseFee * percent) / 100;
@@ -34,13 +38,14 @@ export function calculateUserDiscount(
 }
 
 /**
- * Pre-Registration Referral Link Generator (Phase 4)
- * Generates referral links for users before or after registration.
+ * Pre-Registration Referral Link Generator
+ * Generates official referral links for students before or after full registration.
  */
 export function generatePreRegReferralLink(identifier: string | number): string {
-    const cleanId = String(identifier).trim().replace('ref_', '').replace('AXR-STU-', '');
+    const cleanId = String(identifier).trim();
     const baseUrl = typeof window !== 'undefined'
         ? window.location.origin
         : (SITE_CONFIG.siteUrl || 'https://aserproduction.tech');
+
     return `${baseUrl}/register?ref=${cleanId}`;
 }

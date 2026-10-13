@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { SITE_CONFIG, BANK_ACCOUNTS } from '@/lib/constants';
-import { calculateUserDiscount, generatePreRegReferralLink } from '@/lib/discountEngine';
+import { calculateUserDiscount } from '@/lib/discountEngine';
 import {
     generateStudentCustomId,
     generateNumericUserId,
@@ -24,10 +24,12 @@ function RegisterFormContent() {
     const [isRegistrationOpen, setIsRegistrationOpen] = useState<boolean>(true);
     const [checkingSettings, setCheckingSettings] = useState<boolean>(true);
 
-    // Pre-Registration Referral Link Generator State
-    const [preRegInput, setPreRegInput] = useState('');
+    // Pre-Registration Referral State
+    const [preRegCustomId, setPreRegCustomId] = useState<string>('');
     const [generatedLink, setGeneratedLink] = useState('');
     const [copiedPreReg, setCopiedPreReg] = useState(false);
+    const [preRegVerifiedCoins, setPreRegVerifiedCoins] = useState(0);
+    const [preRegTotalJoined, setPreRegTotalJoined] = useState(0);
 
     // Form State
     const [step, setStep] = useState(1);
@@ -48,7 +50,7 @@ function RegisterFormContent() {
     // Completed State
     const [generatedCustomId, setGeneratedCustomId] = useState('');
 
-    // 1. Check Registration Status & Capture Exact Referral Parameter
+    // Load or Initialize Pre-Reg Custom ID
     useEffect(() => {
         async function checkRegistrationStatus() {
             try {
@@ -72,7 +74,7 @@ function RegisterFormContent() {
 
         checkRegistrationStatus();
 
-        // Capture Raw Referral Parameter without breaking strings or phone numbers
+        // Capture Referral Link Code (?ref=...)
         const refParam = searchParams.get('ref');
         if (refParam) {
             const rawRef = refParam.trim();
@@ -88,15 +90,64 @@ function RegisterFormContent() {
                 setReferredBy(storedRef);
             }
         }
+
+        // Initialize or Load Pre-Registration Custom ID for unregistered user
+        if (typeof window !== 'undefined') {
+            let existingPreRegId = localStorage.getItem('axr_my_prereg_custom_id');
+            if (!existingPreRegId) {
+                existingPreRegId = generateStudentCustomId();
+                localStorage.setItem('axr_my_prereg_custom_id', existingPreRegId);
+            }
+            setPreRegCustomId(existingPreRegId);
+            const initialLink = `${SITE_CONFIG.siteUrl}/register?ref=${existingPreRegId}`;
+            setGeneratedLink(initialLink);
+            fetchPreRegReferrals(existingPreRegId);
+        }
     }, [searchParams]);
 
-    const discountInfo = calculateUserDiscount(0, 0, SITE_CONFIG.courseFee);
+    // Fetch referral counts for pre-registered ID or phone
+    const fetchPreRegReferrals = async (idOrPhone: string) => {
+        if (!idOrPhone) return;
+        try {
+            const cleanId = idOrPhone.replace(/^AXR-STU-/i, '').trim();
+            const phoneDigits = idOrPhone.replace(/\D/g, '');
+            const phoneLast9 = phoneDigits.length >= 9 ? phoneDigits.slice(-9) : phoneDigits;
+
+            const searchTerms = Array.from(new Set([idOrPhone, cleanId, phoneLast9])).filter((t) => t && t.length >= 3);
+            const orConditions = searchTerms.map((t) => `referred_by.ilike.%${t}%`).join(',');
+
+            const { data, error } = await supabase
+                .from('students')
+                .select('status')
+                .or(orConditions);
+
+            if (!error && data) {
+                setPreRegTotalJoined(data.length);
+                const verifiedCount = data.filter((s) => s.status === 'Verified').length;
+                setPreRegVerifiedCoins(verifiedCount);
+            }
+        } catch (err) {
+            console.warn('Notice loading pre-reg referrals:', err);
+        }
+    };
+
+    // Recalculate discount live based on accumulated coins
+    const activeCoins = preRegVerifiedCoins;
+    const discountInfo = calculateUserDiscount(activeCoins, preRegTotalJoined, SITE_CONFIG.courseFee);
 
     const handleGeneratePreRegLink = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!preRegInput.trim()) return;
-        const link = generatePreRegReferralLink(preRegInput.trim());
+        let currentId = preRegCustomId;
+        if (!currentId) {
+            currentId = generateStudentCustomId();
+            setPreRegCustomId(currentId);
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('axr_my_prereg_custom_id', currentId);
+            }
+        }
+        const link = `${SITE_CONFIG.siteUrl}/register?ref=${currentId}`;
         setGeneratedLink(link);
+        fetchPreRegReferrals(currentId);
     };
 
     const copyPreRegLink = () => {
@@ -150,6 +201,11 @@ function RegisterFormContent() {
             setErrorMessage('የይለፍ ቃል ቢያንስ 6 አሃዝ/ፊደል መሆን አለበት።');
             return;
         }
+
+        // Fetch referrals using both phone and pre-reg custom ID for maximum accuracy
+        fetchPreRegReferrals(phone);
+        if (preRegCustomId) fetchPreRegReferrals(preRegCustomId);
+
         setErrorMessage('');
         setStep(3);
     };
@@ -200,7 +256,8 @@ function RegisterFormContent() {
             }
 
             const numericUserId = generateNumericUserId();
-            const customId = generateStudentCustomId();
+            // Use pre-reg generated custom ID if available so prior referrals link seamlessly
+            const customId = preRegCustomId || generateStudentCustomId();
 
             let currentRound = 2;
             try {
@@ -312,7 +369,7 @@ function RegisterFormContent() {
     return (
         <div className="mx-auto max-w-2xl px-4 py-10 animate-fade-in-up sm:py-16 text-slate-100 min-h-screen">
 
-            {/* PRE-REGISTRATION REFERRAL LINK GENERATOR CARD */}
+            {/* PRE-REGISTRATION REFERRAL ENGINE CARD */}
             <div className="mb-8 glass-card-pro rounded-3xl p-6 border border-cyan-500/30 bg-slate-900/90 space-y-4 shadow-[0_0_30px_rgba(56,189,248,0.1)]">
                 <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-950 border border-cyan-500/40 text-cyan-400 font-bold">
@@ -323,27 +380,43 @@ function RegisterFormContent() {
                             ሳይመዘገቡ ቅናሽ ያግኙ! (Pre-Registration Referral)
                         </h2>
                         <p className="text-[11px] text-slate-400">
-                            ሳይመዘገቡ በፊት የስልክ ቁጥርዎን በማስገባት የመጋበዣ ሊንክዎን አሁኑኑ ማፍራት ይችላሉ።
+                            ሳይመዘገቡ አሁኑኑ የመጋበዣ ID እና Link በማመንጨት ጓደኞችዎን ይጋብዙ፤ ቅናሽ ይሰብስቡ!
                         </p>
                     </div>
                 </div>
 
-                <form onSubmit={handleGeneratePreRegLink} className="flex gap-2">
-                    <input
-                        type="text"
-                        required
-                        placeholder="የስልክ ቁጥርዎ ወይም Username (ለምሳሌ፦ 0912345678)"
-                        value={preRegInput}
-                        onChange={(e) => setPreRegInput(e.target.value)}
-                        className="flex-1 rounded-xl border border-slate-800 bg-slate-950 px-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition"
-                    />
+                <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <div className="space-y-1">
+                        <span className="text-[10px] font-mono font-bold uppercase text-slate-400">የእርስዎ Pre-Registration ID:</span>
+                        <p className="font-mono text-base font-black text-cyan-400">{preRegCustomId || 'AXR-STU-XXXX'}</p>
+                    </div>
+
                     <button
-                        type="submit"
-                        className="rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-black text-slate-950 transition hover:bg-cyan-400 shrink-0"
+                        type="button"
+                        onClick={handleGeneratePreRegLink}
+                        className="w-full sm:w-auto rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-black text-slate-950 transition hover:bg-cyan-400 shrink-0"
                     >
-                        Generate Link
+                        Generate / Refresh Link
                     </button>
-                </form>
+                </div>
+
+                {/* Pre-Registration Live Coins Widget */}
+                {preRegTotalJoined > 0 && (
+                    <div className="grid grid-cols-3 gap-2 text-center pt-1 font-mono">
+                        <div className="rounded-xl border border-slate-800 bg-slate-950 p-2">
+                            <span className="text-[9px] text-slate-400 uppercase">Joined</span>
+                            <p className="text-sm font-bold text-slate-100">{preRegTotalJoined}</p>
+                        </div>
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-2">
+                            <span className="text-[9px] text-amber-400 uppercase">Coins</span>
+                            <p className="text-sm font-bold text-amber-400">{discountInfo.coins}</p>
+                        </div>
+                        <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-2">
+                            <span className="text-[9px] text-emerald-400 uppercase">Discount</span>
+                            <p className="text-sm font-bold text-emerald-400">{discountInfo.percent}%</p>
+                        </div>
+                    </div>
+                )}
 
                 {generatedLink && (
                     <div className="space-y-2 pt-1">
@@ -626,9 +699,26 @@ function RegisterFormContent() {
                         </div>
                     )}
 
-                    <div className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/80 p-4 font-mono text-xs">
-                        <span className="text-slate-400">የሚከፍሉት ትክክለኛ መጠን፦</span>
-                        <span className="text-base font-extrabold text-emerald-400">{formatCurrency(discountInfo.finalFee)}</span>
+                    {/* DYNAMIC DISCOUNT BILLING SUMMARY */}
+                    <div className="space-y-2 rounded-2xl border border-emerald-500/30 bg-slate-950/90 p-4 font-mono text-xs">
+                        <div className="flex justify-between text-slate-400">
+                            <span>መደበኛ የኮርስ ክፍያ፦</span>
+                            <span>{formatCurrency(SITE_CONFIG.courseFee)}</span>
+                        </div>
+
+                        {discountInfo.coins > 0 && (
+                            <div className="flex justify-between text-emerald-400 font-bold">
+                                <span>የተሰበሰበ ቅናሽ ({discountInfo.coins} Coins / {discountInfo.percent}% Off)፦</span>
+                                <span>- {formatCurrency(discountInfo.discountAmount)}</span>
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-between border-t border-slate-800 pt-2 text-sm font-extrabold text-slate-100">
+                            <span className="text-slate-300">የሚከፍሉት ትክክለኛ መጠን፦</span>
+                            <span className="text-base sm:text-lg font-black text-emerald-400">
+                                {formatCurrency(discountInfo.finalFee)}
+                            </span>
+                        </div>
                     </div>
 
                     <div className="flex gap-3">
