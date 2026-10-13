@@ -14,7 +14,7 @@ import {
     formatCurrency,
 } from '@/lib/utils';
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB Limit in bytes
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB Limit
 
 function RegisterFormContent() {
     const router = useRouter();
@@ -24,7 +24,7 @@ function RegisterFormContent() {
     const [isRegistrationOpen, setIsRegistrationOpen] = useState<boolean>(true);
     const [checkingSettings, setCheckingSettings] = useState<boolean>(true);
 
-    // Pre-Registration Referral Link Generator State (Phase 4)
+    // Pre-Registration Referral Link Generator State
     const [preRegInput, setPreRegInput] = useState('');
     const [generatedLink, setGeneratedLink] = useState('');
     const [copiedPreReg, setCopiedPreReg] = useState(false);
@@ -43,12 +43,12 @@ function RegisterFormContent() {
     const [password, setPassword] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<'CBE' | 'Telebirr'>('CBE');
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
-    const [referredBy, setReferredBy] = useState<string | number | null>(null);
+    const [referredBy, setReferredBy] = useState<string | null>(null);
 
     // Completed State
     const [generatedCustomId, setGeneratedCustomId] = useState('');
 
-    // 1. Check if Registration is Open & Capture Incoming Ref Query Parameter
+    // 1. Check Registration Status & Capture Exact Referral Parameter
     useEffect(() => {
         async function checkRegistrationStatus() {
             try {
@@ -72,14 +72,14 @@ function RegisterFormContent() {
 
         checkRegistrationStatus();
 
-        // Capture Incoming Referral Code (Phone, ID, or Username)
+        // Capture Raw Referral Parameter without breaking strings or phone numbers
         const refParam = searchParams.get('ref');
         if (refParam) {
-            const cleanRef = refParam.replace('ref_', '').replace('AXR-STU-', '').trim();
-            if (cleanRef) {
-                setReferredBy(cleanRef);
+            const rawRef = refParam.trim();
+            if (rawRef) {
+                setReferredBy(rawRef);
                 if (typeof window !== 'undefined') {
-                    localStorage.setItem('axr_referred_by_code', cleanRef);
+                    localStorage.setItem('axr_referred_by_code', rawRef);
                 }
             }
         } else if (typeof window !== 'undefined') {
@@ -92,7 +92,6 @@ function RegisterFormContent() {
 
     const discountInfo = calculateUserDiscount(0, 0, SITE_CONFIG.courseFee);
 
-    // Generate Pre-Registration Referral Link Action
     const handleGeneratePreRegLink = (e: React.FormEvent) => {
         e.preventDefault();
         if (!preRegInput.trim()) return;
@@ -182,7 +181,6 @@ function RegisterFormContent() {
 
             let publicReceiptUrl = `offline_${fileName}`;
 
-            // Upload file to Supabase Storage
             try {
                 const { error: uploadError } = await supabase.storage
                     .from('receipts')
@@ -204,7 +202,6 @@ function RegisterFormContent() {
             const numericUserId = generateNumericUserId();
             const customId = generateStudentCustomId();
 
-            // Fetch Current Active Round Dynamically
             let currentRound = 2;
             try {
                 const { data: settingsData } = await supabase
@@ -232,7 +229,7 @@ function RegisterFormContent() {
                 screenshot_file_id: publicReceiptUrl,
                 status: 'Pending',
                 round: currentRound,
-                referred_by: referredBy ? String(referredBy) : null,
+                referred_by: referredBy ? String(referredBy).trim() : null,
             };
 
             const { error: insertError } = await supabase
@@ -315,7 +312,7 @@ function RegisterFormContent() {
     return (
         <div className="mx-auto max-w-2xl px-4 py-10 animate-fade-in-up sm:py-16 text-slate-100 min-h-screen">
 
-            {/* PRE-REGISTRATION REFERRAL LINK GENERATOR CARD (Phase 4) */}
+            {/* PRE-REGISTRATION REFERRAL LINK GENERATOR CARD */}
             <div className="mb-8 glass-card-pro rounded-3xl p-6 border border-cyan-500/30 bg-slate-900/90 space-y-4 shadow-[0_0_30px_rgba(56,189,248,0.1)]">
                 <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-950 border border-cyan-500/40 text-cyan-400 font-bold">
